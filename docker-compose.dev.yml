@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:14-alpine
+    container_name: realm-postgres
+    environment:
+      POSTGRES_DB: realmdb
+      POSTGRES_USER: realmuser
+      POSTGRES_PASSWORD: realmpass
+    ports:
+      - "5432:5432"
+    volumes:
+      - realm-postgres-data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    networks:
+      - realm-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U realmuser -d realmdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: realm-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@realm-mesh.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    networks:
+      - realm-network
+    depends_on:
+      - postgres
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+
+volumes:
+  realm-postgres-data:
+    driver: local
+  pgadmin-data:
+    driver: local
+
+networks:
+  realm-network:
+    driver: bridge

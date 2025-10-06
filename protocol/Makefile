@@ -102,7 +102,7 @@ generate-control-plane-java:
 		--group-id io.realmmesh \
 		--artifact-id control-plane-api \
 		--artifact-version 1.0.0 \
-		--additional-properties=dateLibrary=java8,serializationLibrary=jackson,useJakartaEe=true,hideGenerationTimestamp=true,openApiNullable=false,generateModelTests=false,generateApiTests=false,generateModelDocumentation=false,generateApiDocumentation=false,interfaceOnly=true,skipDefaultInterface=true,useTags=true
+		--additional-properties=dateLibrary=java8,serializationLibrary=jackson,useJakartaEe=true,useSpringBoot3=true,hideGenerationTimestamp=true,openApiNullable=false,generateModelTests=false,generateApiTests=false,generateModelDocumentation=false,generateApiDocumentation=false,interfaceOnly=true,skipDefaultInterface=true,useTags=true
 	@echo "$(GREEN)✓ Control Plane Java models and controllers generated in $(CONTROL_PLANE_JAVA_OUTPUT)$(RESET)"
 
 generate-control-plane-typescript: generate-control-plane-ts
