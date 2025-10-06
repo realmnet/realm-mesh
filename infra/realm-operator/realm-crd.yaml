@@ -1,0 +1,46 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: realms.interrealm.io
+spec:
+  group: interrealm.io
+  names:
+    kind: Realm
+    plural: realms
+    singular: realm
+  scope: Namespaced
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            required: [image]
+            properties:
+              image:
+                type: string
+                description: "Container image for the realm"
+              parentRealm:
+                type: string
+                description: "Parent realm ID for hierarchical setup"
+              replicas:
+                type: integer
+                default: 1
+                minimum: 1
+                description: "Number of realm replicas"
+          status:
+            type: object
+            properties:
+              phase:
+                type: string
+                description: "Current phase of the realm (Running, Pending, Failed)"
+              deploymentName:
+                type: string
+                description: "Name of the deployment created for this realm"
+              readyReplicas:
+                type: integer
+                description: "Number of ready replicas"
