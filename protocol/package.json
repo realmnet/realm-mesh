@@ -7,6 +7,10 @@
     "generate": "make generate",
     "generate:java": "make generate-java",
     "generate:ts": "make generate-typescript",
+    "generate:control-plane": "make generate-control-plane",
+    "generate:control-plane-java": "make generate-control-plane-java",
+    "generate:control-plane-ts": "make generate-control-plane-typescript",
+    "generate:all": "make all",
     "clean": "make clean",
     "validate": "make validate",
     "watch": "make watch"
