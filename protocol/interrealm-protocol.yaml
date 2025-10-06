@@ -1,0 +1,165 @@
+# interrealm-protocol.yaml
+openapi: 3.0.0
+info:
+  title: InterRealm Protocol
+  version: 1.0.0
+  description: |
+    Defines the message envelope and core message types for InterRealm communication.
+    This is the wire protocol for realm-to-realm messaging.
+
+paths: {}
+
+components:
+  schemas:
+    MessageEnvelope:
+      type: object
+      required: [messageId, sourceRealm, targetRealm, messageType, timestamp, payload]
+      properties:
+        messageId:
+          type: string
+          format: uuid
+          description: Unique identifier for this message
+        sourceRealm:
+          type: string
+          description: Source realm identifier
+          example: "realm://org.cluster.realm-name"
+        targetRealm:
+          type: string
+          description: Target realm identifier
+          example: "realm://org.cluster.realm-name"
+        messageType:
+          type: string
+          enum: [service-request, service-response, event, loop-broadcast]
+          description: Type of message being sent
+        schemaId:
+          type: string
+          description: Schema identifier for payload validation
+          example: "interrealm.healthcare/DrugQuery:v1"
+        timestamp:
+          type: string
+          format: date-time
+          description: When the message was created
+        headers:
+          type: object
+          additionalProperties: true
+          description: Additional message headers
+        payload:
+          type: object
+          description: The actual message payload
+
+    ServiceRequest:
+      allOf:
+        - $ref: '#/components/schemas/MessageEnvelope'
+        - type: object
+          required: [correlationId]
+          properties:
+            messageType:
+              type: string
+              enum: [service-request]
+            correlationId:
+              type: string
+              format: uuid
+              description: Correlation ID for request-response tracking
+            timeout:
+              type: integer
+              description: Timeout in milliseconds
+              default: 30000
+
+    ServiceResponse:
+      allOf:
+        - $ref: '#/components/schemas/MessageEnvelope'
+        - type: object
+          required: [correlationId, success]
+          properties:
+            messageType:
+              type: string
+              enum: [service-response]
+            correlationId:
+              type: string
+              format: uuid
+              description: Correlation ID matching the request
+            success:
+              type: boolean
+              description: Whether the request was successful
+            error:
+              type: object
+              description: Error details if success is false
+              properties:
+                code:
+                  type: string
+                  description: Error code
+                message:
+                  type: string
+                  description: Human-readable error message
+
+    Event:
+      allOf:
+        - $ref: '#/components/schemas/MessageEnvelope'
+        - type: object
+          properties:
+            messageType:
+              type: string
+              enum: [event]
+            eventType:
+              type: string
+              description: Specific type of event
+              example: "patient.admitted"
+
+    LoopBroadcast:
+      allOf:
+        - $ref: '#/components/schemas/MessageEnvelope'
+        - type: object
+          properties:
+            messageType:
+              type: string
+              enum: [loop-broadcast]
+            loopId:
+              type: string
+              description: Loop identifier for broadcast scope
+              example: "hospital-network-loop"
+            ttl:
+              type: integer
+              description: Time to live (hops) for broadcast message
+              default: 3
+
+    # Common error types
+    ErrorDetail:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Machine-readable error code
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          additionalProperties: true
+          description: Additional error context
+
+    # Realm metadata for discovery
+    RealmInfo:
+      type: object
+      required: [realmId, name, capabilities]
+      properties:
+        realmId:
+          type: string
+          description: Unique realm identifier
+          example: "realm://org.cluster.realm-name"
+        name:
+          type: string
+          description: Human-readable realm name
+        description:
+          type: string
+          description: Realm description
+        capabilities:
+          type: array
+          items:
+            type: string
+          description: List of capabilities this realm provides
+          example: ["patient-data", "drug-interactions", "lab-results"]
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Additional realm metadata
