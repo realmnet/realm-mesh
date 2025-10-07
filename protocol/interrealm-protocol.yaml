@@ -1,16 +1,20 @@
-# interrealm-protocol.yaml
 openapi: 3.0.0
 info:
   title: InterRealm Protocol
   version: 1.0.0
   description: |
     Defines the message envelope and core message types for InterRealm communication.
-    This is the wire protocol for realm-to-realm messaging.
+    This specification represents the foundational wire protocol used by RealmMesh
+    for distributed message exchange, discovery, and routing across Realms.
 
 paths: {}
 
 components:
   schemas:
+
+    # --------------------------------------------
+    # Core Message Envelope
+    # --------------------------------------------
     MessageEnvelope:
       type: object
       required: [messageId, sourceRealm, targetRealm, messageType, timestamp, payload]
@@ -21,12 +25,12 @@ components:
           description: Unique identifier for this message
         sourceRealm:
           type: string
-          description: Source realm identifier
-          example: "realm://org.cluster.realm-name"
+          description: Identifier of the source realm
+          example: "realm://org.cluster.finance"
         targetRealm:
           type: string
-          description: Target realm identifier
-          example: "realm://org.cluster.realm-name"
+          description: Identifier of the target realm
+          example: "realm://org.cluster.risk"
         messageType:
           type: string
           enum: [service-request, service-response, event, loop-broadcast]
@@ -38,15 +42,18 @@ components:
         timestamp:
           type: string
           format: date-time
-          description: When the message was created
+          description: Time when the message was created
         headers:
           type: object
           additionalProperties: true
-          description: Additional message headers
+          description: Arbitrary message headers
         payload:
           type: object
-          description: The actual message payload
+          description: Message payload object
 
+    # --------------------------------------------
+    # Service Request / Response
+    # --------------------------------------------
     ServiceRequest:
       allOf:
         - $ref: '#/components/schemas/MessageEnvelope'
@@ -77,21 +84,16 @@ components:
             correlationId:
               type: string
               format: uuid
-              description: Correlation ID matching the request
+              description: Correlation ID matching the original request
             success:
               type: boolean
               description: Whether the request was successful
             error:
-              type: object
-              description: Error details if success is false
-              properties:
-                code:
-                  type: string
-                  description: Error code
-                message:
-                  type: string
-                  description: Human-readable error message
+              $ref: '#/components/schemas/ErrorDetail'
 
+    # --------------------------------------------
+    # Event Messaging
+    # --------------------------------------------
     Event:
       allOf:
         - $ref: '#/components/schemas/MessageEnvelope'
@@ -103,7 +105,7 @@ components:
             eventType:
               type: string
               description: Specific type of event
-              example: "patient.admitted"
+              example: "agent.loop.heartbeat"
 
     LoopBroadcast:
       allOf:
@@ -115,14 +117,16 @@ components:
               enum: [loop-broadcast]
             loopId:
               type: string
-              description: Loop identifier for broadcast scope
+              description: Identifier for the broadcast loop
               example: "hospital-network-loop"
             ttl:
               type: integer
-              description: Time to live (hops) for broadcast message
+              description: Number of hops allowed before expiration
               default: 3
 
-    # Common error types
+    # --------------------------------------------
+    # Error Schema
+    # --------------------------------------------
     ErrorDetail:
       type: object
       required: [code, message]
@@ -136,9 +140,11 @@ components:
         details:
           type: object
           additionalProperties: true
-          description: Additional error context
+          description: Additional error context or metadata
 
-    # Realm metadata for discovery
+    # --------------------------------------------
+    # Realm Metadata
+    # --------------------------------------------
     RealmInfo:
       type: object
       required: [realmId, name, capabilities]
@@ -146,7 +152,7 @@ components:
         realmId:
           type: string
           description: Unique realm identifier
-          example: "realm://org.cluster.realm-name"
+          example: "realm://org.cluster.finance"
         name:
           type: string
           description: Human-readable realm name
@@ -157,9 +163,33 @@ components:
           type: array
           items:
             type: string
-          description: List of capabilities this realm provides
-          example: ["patient-data", "drug-interactions", "lab-results"]
+          description: Capabilities this realm provides
+          example: ["finance-data", "loan-processing"]
         metadata:
           type: object
           additionalProperties: true
           description: Additional realm metadata
+
+    # --------------------------------------------
+    # Mesh Metadata (used by console)
+    # --------------------------------------------
+    MeshInfo:
+      type: object
+      required: [uuid, name, version, environment]
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          description: Unique identifier for the RealmMesh instance
+        name:
+          type: string
+          description: Human-readable name of the mesh instance
+          example: "enterprise-research-mesh"
+        version:
+          type: string
+          description: Version of the mesh
+          example: "1.0.0"
+        environment:
+          type: string
+          description: Environment name (dev, staging, prod)
+          example: "development"

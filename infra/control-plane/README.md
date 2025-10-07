@@ -18,4 +18,5 @@ Once the application is running, you can access:
 ### Database
 
 - **Database:** localhost:5432 (control_plane_db / control_plane_user)
+- 
 - **PgAdmin:** http://localhost:5050 (admin@control-plane.local / admin)

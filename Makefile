@@ -1,10 +1,10 @@
 .PHONY: all build clean test help generate \
-        build-protocol build-realm-operator build-control-plane \
-        clean-protocol clean-realm-operator clean-control-plane \
+        build-protocol build-realm-operator build-control-plane build-console \
+        clean-protocol clean-realm-operator clean-control-plane clean-console \
         test-realm-operator test-control-plane \
         run-control-plane run-realm-operator realm-operator-dev \
-        control-plane-db-up control-plane-db-down control-plane-db-reset control-plane-db-logs control-plane-db-shell \
-        control-plane-dev control-plane-start dev
+        plane-db-up plane-db-down plane-db-reset plane-db-logs plane-db-shell \
+        plane-dev plane-start dev
 
 # Default target - show help
 all: help
@@ -24,6 +24,7 @@ help:
 	@echo "  make build-protocol    - Build protocol artifacts only"
 	@echo "  make build-realm-operator - Build Realm Operator only"
 	@echo "  make build-control-plane - Build Control Plane only"
+	@echo "  make build-console     - Build Console React app only"
 	@echo ""
 	@echo "Run targets:"
 	@echo "  make run-control-plane - Start the Control Plane"
@@ -31,12 +32,12 @@ help:
 	@echo "  make dev              - Start development environment (database)"
 	@echo ""
 	@echo "Control Plane Database targets:"
-	@echo "  make control-plane-db-up     - Start PostgreSQL and pgAdmin for control-plane"
-	@echo "  make control-plane-db-down   - Stop control-plane database services"
-	@echo "  make control-plane-db-reset  - Reset control-plane database (destroys data)"
-	@echo "  make control-plane-db-shell  - Open PostgreSQL shell for control-plane"
-	@echo "  make control-plane-db-logs   - Show control-plane database logs"
-	@echo "  make control-plane-start     - Start database + control-plane (full stack)"
+	@echo "  make plane-db-up     - Start PostgreSQL and pgAdmin for control-plane"
+	@echo "  make plane-db-down   - Stop control-plane database services"
+	@echo "  make plane-db-reset  - Reset control-plane database (destroys data)"
+	@echo "  make plane-db-shell  - Open PostgreSQL shell for control-plane"
+	@echo "  make plane-db-logs   - Show control-plane database logs"
+	@echo "  make plane-start     - Start database + control-plane (full stack)"
 	@echo ""
 	@echo "Quick start:"
 	@echo "  make generate build   - Generate code and build everything"
@@ -47,8 +48,8 @@ generate:
 	cd protocol && $(MAKE) all
 	@echo "Code generation complete"
 
-# Build all projects (protocol artifacts, realm-operator, control-plane)
-build: build-protocol build-realm-operator build-control-plane
+# Build all projects (protocol artifacts, realm-operator, control-plane, console)
+build: build-protocol build-realm-operator build-control-plane build-console
 	@echo "All projects built successfully!"
 
 build-protocol:
@@ -66,8 +67,13 @@ build-control-plane:
 	cd infra && gradle :control-plane:build
 	@echo "Control Plane built"
 
+build-console:
+	@echo "Building Console React app..."
+	cd console && npm run build
+	@echo "Console built"
+
 # Clean all projects
-clean: clean-protocol clean-realm-operator clean-control-plane
+clean: clean-protocol clean-realm-operator clean-control-plane clean-console
 	@echo "All projects cleaned"
 
 clean-protocol:
@@ -81,6 +87,11 @@ clean-realm-operator:
 clean-control-plane:
 	@echo "Cleaning Control Plane..."
 	cd infra && gradle :control-plane:clean
+
+clean-console:
+	@echo "Cleaning Console React app..."
+	cd console && rm -rf dist node_modules/.vite
+	@echo "Console cleaned"
 
 # Run tests
 test: test-realm-operator test-control-plane
@@ -122,8 +133,8 @@ run-control-plane:
 dev-control-plane: build-control-plane run-control-plane
 
 # Control Plane Database commands
-.PHONY: control-plane-db-up
-control-plane-db-up:
+.PHONY: plane-db-up
+plane-db-up:
 	@echo "🚀 Starting Control Plane PostgreSQL database..."
 	docker-compose -f dev/control-plane/docker-compose.dev.yml up -d
 	@echo "📊 PostgreSQL is starting on port 5432"
@@ -131,31 +142,31 @@ control-plane-db-up:
 	@echo "🔑 Default credentials: admin@control-plane.local / admin"
 	@echo "💾 Database: control_plane_db, User: control_plane_user"
 
-.PHONY: control-plane-db-down
-control-plane-db-down:
+.PHONY: plane-db-down
+plane-db-down:
 	@echo "🛑 Stopping Control Plane database services..."
 	docker-compose -f dev/control-plane/docker-compose.dev.yml down
 
-.PHONY: control-plane-db-reset
-control-plane-db-reset:
+.PHONY: plane-db-reset
+plane-db-reset:
 	@echo "🔄 Resetting Control Plane database (this will destroy all data)..."
 	docker-compose -f dev/control-plane/docker-compose.dev.yml down -v
 	docker-compose -f dev/control-plane/docker-compose.dev.yml up -d
 	@echo "✅ Control Plane database has been reset"
 
-.PHONY: control-plane-db-logs
-control-plane-db-logs:
+.PHONY: plane-db-logs
+plane-db-logs:
 	@echo "📋 Showing Control Plane database logs..."
 	docker-compose -f dev/control-plane/docker-compose.dev.yml logs -f postgres
 
-.PHONY: control-plane-db-shell
-control-plane-db-shell:
+.PHONY: plane-db-shell
+plane-db-shell:
 	@echo "🔧 Opening PostgreSQL shell for Control Plane database..."
 	docker exec -it control-plane-postgres psql -U control_plane_user -d control_plane_db
 
 # Start full Control Plane stack (database + application)
-.PHONY: control-plane-start
-control-plane-start: control-plane-db-up
+.PHONY: plane-start
+plane-start: plane-db-up
 	@echo "⏳ Waiting for database to be ready..."
 	@sleep 10
 	@until docker exec control-plane-postgres pg_isready -U control_plane_user -d control_plane_db > /dev/null 2>&1; do \
@@ -168,11 +179,11 @@ control-plane-start: control-plane-db-up
 
 # Legacy database commands (for backward compatibility)
 .PHONY: db-up db-down db-reset db-logs db-shell
-db-up: control-plane-db-up
-db-down: control-plane-db-down
-db-reset: control-plane-db-reset
-db-logs: control-plane-db-logs
-db-shell: control-plane-db-shell
+db-up: plane-db-up
+db-down: plane-db-down
+db-reset: plane-db-reset
+db-logs: plane-db-logs
+db-shell: plane-db-shell
 
 # Realm Operator commands
 .PHONY: run-realm-operator
@@ -213,5 +224,5 @@ dev:
 	@echo "💡 Or run 'make run-control-plane' directly (it will start the database if needed)"
 
 # Enhanced control-plane dev environment
-.PHONY: control-plane-dev
-control-plane-dev: build-control-plane control-plane-start
+.PHONY: plane-dev
+plane-dev: build-control-plane plane-start

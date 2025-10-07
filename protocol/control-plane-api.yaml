@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: RealmMesh Control Plane API
-  description: API for managing RealmMesh canvas operations and realm orchestration
+  description: API for managing RealmMesh operations and realm orchestration
   version: 1.0.0
   contact:
     name: RealmMesh Team
@@ -17,37 +17,20 @@ servers:
     description: Production server
 
 paths:
-  /canvas/{clusterId}:
+  /mesh/info:
     get:
       tags:
-        - Canvas
-      summary: Get canvas for cluster
-      description: Retrieves the current canvas configuration for the specified cluster
-      operationId: getCanvas
-      parameters:
-        - name: clusterId
-          in: path
-          required: true
-          description: The UUID of the cluster
-          schema:
-            type: string
-            format: uuid
+        - RealmMesh
+      summary: Get mesh information
+      description: Retrieves information about the current RealmMesh instance
+      operationId: getMeshInfo
       responses:
         '200':
-          description: Canvas retrieved successfully
+          description: Mesh info retrieved successfully
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  canvas:
-                    $ref: '#/components/schemas/RealmCanvas'
-        '404':
-          description: Canvas not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/MeshInfo'
         '500':
           description: Internal server error
           content:
@@ -55,62 +38,28 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /canvas/list/{clusterId}:
-    get:
-      tags:
-        - Canvas
-      summary: List all canvas versions for cluster
-      description: Lists all available canvas versions for the specified cluster
-      operationId: listCanvases
-      parameters:
-        - name: clusterId
-          in: path
-          required: true
-          description: The UUID of the cluster
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Canvas list retrieved successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  canvases:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/RealmCanvas'
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /canvas/save:
+  /router/message:
     post:
       tags:
-        - Canvas
-      summary: Save canvas configuration
-      description: Saves a canvas configuration without deploying it
-      operationId: saveCanvas
+        - Router
+      summary: Route message between realms
+      description: Routes a message envelope between realms in the mesh
+      operationId: routeMessage
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SaveCanvasRequest'
+              $ref: 'interrealm-protocol.yaml#/components/schemas/MessageEnvelope'
       responses:
-        '200':
-          description: Canvas saved successfully
+        '202':
+          description: Message accepted for routing
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SaveCanvasResponse'
+                $ref: '#/components/schemas/RouteResponse'
         '400':
-          description: Invalid request data
+          description: Invalid message envelope
           content:
             application/json:
               schema:
@@ -122,300 +71,51 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /canvas/deploy/{canvasId}:
-    post:
-      tags:
-        - Canvas
-      summary: Deploy canvas
-      description: Deploys the specified canvas configuration
-      operationId: deployCanvas
-      parameters:
-        - name: canvasId
-          in: path
-          required: true
-          description: The ID of the canvas to deploy
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Canvas deployed successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeployCanvasResponse'
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /canvas/status/{canvasId}:
-    get:
-      tags:
-        - Canvas
-      summary: Get canvas deployment status
-      description: Retrieves the deployment status of the specified canvas
-      operationId: getCanvasStatus
-      parameters:
-        - name: canvasId
-          in: path
-          required: true
-          description: The ID of the canvas
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Canvas status retrieved successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    description: Current deployment status
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
 components:
   schemas:
-    RealmNodeMeta:
+    MeshInfo:
       type: object
       required:
-        - x
-        - y
-      properties:
-        x:
-          type: number
-          description: X coordinate of the node in the canvas
-        y:
-          type: number
-          description: Y coordinate of the node in the canvas
-        expanded:
-          type: boolean
-          description: Whether the node is expanded in the UI
-        color:
-          type: string
-          description: Display color for the node
-        icon:
-          type: string
-          description: Icon identifier for the node
-
-    RealmInput:
-      type: object
-      required:
-        - id
+        - uuid
         - name
-        - type
-        - required
+        - version
+        - environment
       properties:
-        id:
-          type: string
-          description: Unique identifier for the input
-        name:
-          type: string
-          description: Display name of the input
-        type:
-          type: string
-          enum: [service, event, data]
-          description: Type of the input
-        required:
-          type: boolean
-          description: Whether this input is required
-        satisfied:
-          type: boolean
-          description: Whether this input requirement is satisfied
-
-    RealmOutput:
-      type: object
-      required:
-        - id
-        - name
-        - type
-      properties:
-        id:
-          type: string
-          description: Unique identifier for the output
-        name:
-          type: string
-          description: Display name of the output
-        type:
-          type: string
-          enum: [service, event, broadcast]
-          description: Type of the output
-
-    RealmContract:
-      type: object
-      required:
-        - inputs
-        - outputs
-      properties:
-        inputs:
-          type: array
-          items:
-            $ref: '#/components/schemas/RealmInput'
-          description: Input requirements for the realm
-        outputs:
-          type: array
-          items:
-            $ref: '#/components/schemas/RealmOutput'
-          description: Output capabilities of the realm
-
-    RealmNode:
-      type: object
-      required:
-        - id
-        - name
-        - type
-        - meta
-      properties:
-        id:
-          type: string
-          description: Unique identifier for the realm node
-        name:
-          type: string
-          description: Display name of the realm
-        type:
-          type: string
-          enum: [realm, bridge, gateway, ui-realm]
-          description: Type of the realm node
-        status:
-          type: string
-          enum: [running, stopped, error, pending]
-          description: Current status of the realm
-        contract:
-          $ref: '#/components/schemas/RealmContract'
-        inputsSatisfied:
-          type: boolean
-          description: Whether all required inputs are satisfied
-        data:
-          type: object
-          additionalProperties: true
-          description: Additional data associated with the realm
-        meta:
-          $ref: '#/components/schemas/RealmNodeMeta'
-
-    RealmEdge:
-      type: object
-      required:
-        - id
-        - source
-        - target
-      properties:
-        id:
-          type: string
-          description: Unique identifier for the edge
-        source:
-          type: string
-          description: ID of the source node
-        target:
-          type: string
-          description: ID of the target node
-        sourceHandle:
-          type: string
-          description: Specific output handle on the source node
-        targetHandle:
-          type: string
-          description: Specific input handle on the target node
-        type:
-          type: string
-          enum: [parent-child, service, event-producer, event-consumer, broadcast]
-          description: Type of the connection
-        animated:
-          type: boolean
-          description: Whether the edge should be animated in the UI
-        label:
-          type: string
-          description: Display label for the edge
-        data:
-          type: object
-          additionalProperties: true
-          description: Additional data associated with the edge
-
-    RealmCanvas:
-      type: object
-      required:
-        - nodes
-        - edges
-        - lastUpdated
-      properties:
-        nodes:
-          type: array
-          items:
-            $ref: '#/components/schemas/RealmNode'
-          description: Nodes in the canvas
-        edges:
-          type: array
-          items:
-            $ref: '#/components/schemas/RealmEdge'
-          description: Edges connecting the nodes
-        lastUpdated:
-          type: string
-          format: date-time
-          description: Timestamp of last update
-        layout:
-          type: string
-          enum: [hierarchical, freeform]
-          description: Layout style of the canvas
-
-    SaveCanvasRequest:
-      type: object
-      required:
-        - clusterId
-        - nodes
-        - edges
-      properties:
-        clusterId:
+        uuid:
           type: string
           format: uuid
-          description: UUID of the cluster
+          description: Unique identifier for the mesh instance
         name:
           type: string
-          description: Optional name for the canvas
-        nodes:
-          type: array
-          items:
-            $ref: '#/components/schemas/RealmNode'
-          description: Nodes to save in the canvas
-        edges:
-          type: array
-          items:
-            $ref: '#/components/schemas/RealmEdge'
-          description: Edges to save in the canvas
+          description: Name of the mesh instance
+        version:
+          type: string
+          description: Version of the mesh
+        environment:
+          type: string
+          description: Environment (dev, staging, production)
 
-    SaveCanvasResponse:
+    RouteResponse:
       type: object
       required:
-        - success
-        - canvas
-        - message
+        - accepted
+        - messageId
+        - timestamp
       properties:
-        success:
+        accepted:
           type: boolean
-          description: Whether the operation was successful
-        canvas:
-          $ref: '#/components/schemas/RealmCanvas'
-        message:
+          description: Whether the message was accepted for routing
+        messageId:
           type: string
-          description: Success message
-
-    DeployCanvasResponse:
-      type: object
-      required:
-        - success
-        - message
-      properties:
-        success:
-          type: boolean
-          description: Whether the deployment was successful
-        message:
+          format: uuid
+          description: The ID of the accepted message
+        timestamp:
           type: string
-          description: Deployment result message
+          format: date-time
+          description: Time when the message was accepted
+        route:
+          type: string
+          description: The route the message will take (optional)
 
     ErrorResponse:
       type: object
@@ -478,5 +178,7 @@ security:
   - BearerAuth: []
 
 tags:
-  - name: Canvas
-    description: Canvas management operations
+  - name: RealmMesh
+    description: RealmMesh management operations
+  - name: Router
+    description: Message routing operations
