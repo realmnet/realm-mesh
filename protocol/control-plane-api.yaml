@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: RealmMesh Control Plane API
-  description: API for managing RealmMesh operations and realm orchestration
+  description: API for managing RealmMesh operations, capabilities, contracts, and realms
   version: 1.0.0
   contact:
     name: RealmMesh Team
@@ -17,10 +17,14 @@ servers:
     description: Production server
 
 paths:
+
+  # ============================================
+  # Mesh Info
+  # ============================================
   /mesh/info:
     get:
       tags:
-        - RealmMesh
+        - Mesh
       summary: Get mesh information
       description: Retrieves information about the current RealmMesh instance
       operationId: getMeshInfo
@@ -30,14 +34,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MeshInfo'
+                $ref: 'interrealm-protocol.yaml#/components/schemas/MeshInfo'
         '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/InternalError'
 
+  # ============================================
+  # Message Routing
+  # ============================================
   /router/message:
     post:
       tags:
@@ -59,41 +62,348 @@ paths:
               schema:
                 $ref: '#/components/schemas/RouteResponse'
         '400':
-          description: Invalid message envelope
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ============================================
+  # Capabilities
+  # ============================================
+  /capabilities:
+    get:
+      tags:
+        - Capabilities
+      summary: List all capabilities
+      description: Retrieves a list of all registered capabilities
+      operationId: listCapabilities
+      parameters:
+        - name: namespace
+          in: query
+          description: Filter by namespace
+          schema:
+            type: string
+          example: "healthcare"
+        - name: tag
+          in: query
+          description: Filter by tag
+          schema:
+            type: string
+          example: "pharmacy"
+        - name: stability
+          in: query
+          description: Filter by stability level
+          schema:
+            type: string
+            enum: [experimental, beta, stable, deprecated]
+      responses:
+        '200':
+          description: List of capabilities
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ValidationErrorResponse'
+                type: object
+                properties:
+                  capabilities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CapabilitySummary'
+                  total:
+                    type: integer
         '500':
-          description: Internal server error
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags:
+        - Capabilities
+      summary: Register a new capability
+      description: Registers a new capability in the registry
+      operationId: registerCapability
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: 'interrealm-protocol.yaml#/components/schemas/Capability'
+          application/x-yaml:
+            schema:
+              type: string
+              description: "Capability in YAML format"
+      responses:
+        '201':
+          description: Capability registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapabilityRegistered'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          description: Capability version already exists
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /capabilities/{id}:
+    get:
+      tags:
+        - Capabilities
+      summary: Get capability (latest version)
+      description: Retrieves the latest version of a capability
+      operationId: getCapability
+      parameters:
+        - $ref: '#/components/parameters/CapabilityId'
+      responses:
+        '200':
+          description: Capability retrieved
+          content:
+            application/json:
+              schema:
+                $ref: 'interrealm-protocol.yaml#/components/schemas/Capability'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /capabilities/{id}/versions:
+    get:
+      tags:
+        - Capabilities
+      summary: List capability versions
+      description: List all versions of a capability
+      operationId: listCapabilityVersions
+      parameters:
+        - $ref: '#/components/parameters/CapabilityId'
+      responses:
+        '200':
+          description: List of versions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  capabilityId:
+                    type: string
+                  versions:
+                    type: array
+                    items:
+                      type: string
+                    example: ["2.1.0", "2.0.0", "1.5.0"]
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /capabilities/{id}/versions/{version}:
+    get:
+      tags:
+        - Capabilities
+      summary: Get specific capability version
+      description: Retrieves a specific version of a capability
+      operationId: getCapabilityVersion
+      parameters:
+        - $ref: '#/components/parameters/CapabilityId'
+        - $ref: '#/components/parameters/Version'
+      responses:
+        '200':
+          description: Capability version retrieved
+          content:
+            application/json:
+              schema:
+                $ref: 'interrealm-protocol.yaml#/components/schemas/Capability'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ============================================
+  # Contracts
+  # ============================================
+  /contracts:
+    get:
+      tags:
+        - Contracts
+      summary: List all contracts
+      description: Retrieves a list of all realm contracts
+      operationId: listContracts
+      responses:
+        '200':
+          description: List of contracts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  contracts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ContractSummary'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags:
+        - Contracts
+      summary: Create a contract
+      description: Creates a new contract for a realm
+      operationId: createContract
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: 'interrealm-protocol.yaml#/components/schemas/Contract'
+      responses:
+        '201':
+          description: Contract created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractCreated'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /contracts/{realmId}:
+    get:
+      tags:
+        - Contracts
+      summary: Get contract for realm (latest version)
+      description: Retrieves the latest contract for a realm
+      operationId: getContract
+      parameters:
+        - $ref: '#/components/parameters/RealmId'
+      responses:
+        '200':
+          description: Contract retrieved
+          content:
+            application/json:
+              schema:
+                $ref: 'interrealm-protocol.yaml#/components/schemas/Contract'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    put:
+      tags:
+        - Contracts
+      summary: Update contract for realm
+      description: Updates a contract (creates new version)
+      operationId: updateContract
+      parameters:
+        - $ref: '#/components/parameters/RealmId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: 'interrealm-protocol.yaml#/components/schemas/Contract'
+      responses:
+        '200':
+          description: Contract updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractCreated'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /contracts/{realmId}/versions/{version}:
+    get:
+      tags:
+        - Contracts
+      summary: Get specific contract version
+      description: Retrieves a specific version of a contract
+      operationId: getContractVersion
+      parameters:
+        - $ref: '#/components/parameters/RealmId'
+        - $ref: '#/components/parameters/Version'
+      responses:
+        '200':
+          description: Contract version retrieved
+          content:
+            application/json:
+              schema:
+                $ref: 'interrealm-protocol.yaml#/components/schemas/Contract'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /contracts/{realmId}/validate:
+    post:
+      tags:
+        - Contracts
+      summary: Validate contract fulfillment
+      description: Validates if a contract can be fulfilled by checking gateway policies and available capabilities
+      operationId: validateContract
+      parameters:
+        - $ref: '#/components/parameters/RealmId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: 'interrealm-protocol.yaml#/components/schemas/Contract'
+      responses:
+        '200':
+          description: Contract validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractValidationResult'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
 components:
+
+  # ============================================
+  # Parameters
+  # ============================================
+  parameters:
+    CapabilityId:
+      name: id
+      in: path
+      required: true
+      description: Capability identifier (namespace.name)
+      schema:
+        type: string
+        pattern: "^[a-z0-9-]+\\.[a-z0-9-]+$"
+      example: "healthcare.pharmacy"
+
+    Version:
+      name: version
+      in: path
+      required: true
+      description: Semantic version
+      schema:
+        type: string
+        pattern: "^\\d+\\.\\d+\\.\\d+$"
+      example: "2.1.0"
+
+    RealmId:
+      name: realmId
+      in: path
+      required: true
+      description: Realm identifier
+      schema:
+        type: string
+      example: "realm_compute_002"
+
+  # ============================================
+  # Schemas
+  # ============================================
   schemas:
-    MeshInfo:
-      type: object
-      required:
-        - uuid
-        - name
-        - version
-        - environment
-      properties:
-        uuid:
-          type: string
-          format: uuid
-          description: Unique identifier for the mesh instance
-        name:
-          type: string
-          description: Name of the mesh instance
-        version:
-          type: string
-          description: Version of the mesh
-        environment:
-          type: string
-          description: Environment (dev, staging, production)
 
     RouteResponse:
       type: object
@@ -104,18 +414,118 @@ components:
       properties:
         accepted:
           type: boolean
-          description: Whether the message was accepted for routing
         messageId:
           type: string
           format: uuid
-          description: The ID of the accepted message
         timestamp:
           type: string
           format: date-time
-          description: Time when the message was accepted
         route:
           type: string
-          description: The route the message will take (optional)
+          description: "The route path (optional)"
+
+    CapabilitySummary:
+      type: object
+      properties:
+        id:
+          type: string
+        version:
+          type: string
+        description:
+          type: string
+        author:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        stability:
+          type: string
+        servicesCount:
+          type: integer
+        eventsCount:
+          type: integer
+        loopsCount:
+          type: integer
+
+    CapabilityRegistered:
+      type: object
+      properties:
+        id:
+          type: string
+        version:
+          type: string
+        registeredAt:
+          type: string
+          format: date-time
+        message:
+          type: string
+          example: "Capability registered successfully"
+
+    ContractSummary:
+      type: object
+      properties:
+        realmId:
+          type: string
+        version:
+          type: string
+        description:
+          type: string
+        providesCount:
+          type: integer
+        requiresCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    ContractCreated:
+      type: object
+      properties:
+        realmId:
+          type: string
+        version:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        message:
+          type: string
+
+    ContractValidationResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+          description: "Whether the contract can be fulfilled"
+        realmId:
+          type: string
+        issues:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [missing_capability, gateway_blocked, invalid_reference]
+              severity:
+                type: string
+                enum: [error, warning]
+              message:
+                type: string
+              capabilityRef:
+                type: string
+              suggestedAction:
+                type: string
+        fulfillmentMap:
+          type: object
+          description: "Map of required capabilities to available realms"
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          example:
+            "healthcare.pharmacy/v2.1.0/DrugQuery": ["realm_compute_003", "realm_compute_005"]
 
     ErrorResponse:
       type: object
@@ -124,7 +534,6 @@ components:
       properties:
         error:
           type: string
-          description: Error message
 
     ValidationError:
       type: object
@@ -137,21 +546,16 @@ components:
       properties:
         code:
           type: string
-          description: Error code
         expected:
           type: string
-          description: Expected value type
         received:
           type: string
-          description: Actual received value type
         path:
           type: array
           items:
             type: string
-          description: Path to the invalid field
         message:
           type: string
-          description: Validation error message
 
     ValidationErrorResponse:
       type: object
@@ -161,13 +565,39 @@ components:
       properties:
         error:
           type: string
-          description: General error message
         details:
           type: array
           items:
             $ref: '#/components/schemas/ValidationError'
-          description: Detailed validation errors
 
+  # ============================================
+  # Responses
+  # ============================================
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationErrorResponse'
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================
+  # Security
+  # ============================================
   securitySchemes:
     BearerAuth:
       type: http
@@ -178,7 +608,11 @@ security:
   - BearerAuth: []
 
 tags:
-  - name: RealmMesh
+  - name: Mesh
     description: RealmMesh management operations
   - name: Router
     description: Message routing operations
+  - name: Capabilities
+    description: Capability registry operations
+  - name: Contracts
+    description: Contract management operations

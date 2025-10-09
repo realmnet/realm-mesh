@@ -3,18 +3,19 @@ info:
   title: InterRealm Protocol
   version: 1.0.0
   description: |
-    Defines the message envelope and core message types for InterRealm communication.
-    This specification represents the foundational wire protocol used by RealmMesh
-    for distributed message exchange, discovery, and routing across Realms.
+    Defines the message envelope, core schemas, and capability/contract definitions
+    for InterRealm communication. This specification represents the foundational
+    protocol used by RealmMesh for distributed message exchange, discovery, and
+    routing across Realms.
 
 paths: {}
 
 components:
   schemas:
 
-    # --------------------------------------------
-    # Core Message Envelope
-    # --------------------------------------------
+    # ============================================
+    # Core Message Envelope (used by routing API)
+    # ============================================
     MessageEnvelope:
       type: object
       required: [messageId, sourceRealm, targetRealm, messageType, timestamp, payload]
@@ -33,16 +34,20 @@ components:
           example: "realm://org.cluster.risk"
         messageType:
           type: string
-          enum: [service-request, service-response, event, loop-broadcast]
+          enum: [service-request, service-response, event, loop-message]
           description: Type of message being sent
-        schemaId:
+        capabilityRef:
           type: string
-          description: Schema identifier for payload validation
-          example: "interrealm.healthcare/DrugQuery:v1"
+          description: Reference to capability (namespace.name/version/resource)
+          example: "healthcare.pharmacy/v2.1.0/DrugQuery"
         timestamp:
           type: string
           format: date-time
           description: Time when the message was created
+        correlationId:
+          type: string
+          format: uuid
+          description: Correlation ID for request-response tracking (optional)
         headers:
           type: object
           additionalProperties: true
@@ -51,128 +56,9 @@ components:
           type: object
           description: Message payload object
 
-    # --------------------------------------------
-    # Service Request / Response
-    # --------------------------------------------
-    ServiceRequest:
-      allOf:
-        - $ref: '#/components/schemas/MessageEnvelope'
-        - type: object
-          required: [correlationId]
-          properties:
-            messageType:
-              type: string
-              enum: [service-request]
-            correlationId:
-              type: string
-              format: uuid
-              description: Correlation ID for request-response tracking
-            timeout:
-              type: integer
-              description: Timeout in milliseconds
-              default: 30000
-
-    ServiceResponse:
-      allOf:
-        - $ref: '#/components/schemas/MessageEnvelope'
-        - type: object
-          required: [correlationId, success]
-          properties:
-            messageType:
-              type: string
-              enum: [service-response]
-            correlationId:
-              type: string
-              format: uuid
-              description: Correlation ID matching the original request
-            success:
-              type: boolean
-              description: Whether the request was successful
-            error:
-              $ref: '#/components/schemas/ErrorDetail'
-
-    # --------------------------------------------
-    # Event Messaging
-    # --------------------------------------------
-    Event:
-      allOf:
-        - $ref: '#/components/schemas/MessageEnvelope'
-        - type: object
-          properties:
-            messageType:
-              type: string
-              enum: [event]
-            eventType:
-              type: string
-              description: Specific type of event
-              example: "agent.loop.heartbeat"
-
-    LoopBroadcast:
-      allOf:
-        - $ref: '#/components/schemas/MessageEnvelope'
-        - type: object
-          properties:
-            messageType:
-              type: string
-              enum: [loop-broadcast]
-            loopId:
-              type: string
-              description: Identifier for the broadcast loop
-              example: "hospital-network-loop"
-            ttl:
-              type: integer
-              description: Number of hops allowed before expiration
-              default: 3
-
-    # --------------------------------------------
-    # Error Schema
-    # --------------------------------------------
-    ErrorDetail:
-      type: object
-      required: [code, message]
-      properties:
-        code:
-          type: string
-          description: Machine-readable error code
-        message:
-          type: string
-          description: Human-readable error message
-        details:
-          type: object
-          additionalProperties: true
-          description: Additional error context or metadata
-
-    # --------------------------------------------
-    # Realm Metadata
-    # --------------------------------------------
-    RealmInfo:
-      type: object
-      required: [realmId, name, capabilities]
-      properties:
-        realmId:
-          type: string
-          description: Unique realm identifier
-          example: "realm://org.cluster.finance"
-        name:
-          type: string
-          description: Human-readable realm name
-        description:
-          type: string
-          description: Realm description
-        capabilities:
-          type: array
-          items:
-            type: string
-          description: Capabilities this realm provides
-          example: ["finance-data", "loan-processing"]
-        metadata:
-          type: object
-          additionalProperties: true
-          description: Additional realm metadata
-
-    # --------------------------------------------
-    # Mesh Metadata (used by console)
-    # --------------------------------------------
+    # ============================================
+    # Mesh Metadata (used by console and API)
+    # ============================================
     MeshInfo:
       type: object
       required: [uuid, name, version, environment]
@@ -193,3 +79,550 @@ components:
           type: string
           description: Environment name (dev, staging, prod)
           example: "development"
+
+    # ============================================
+    # Error Schema (common)
+    # ============================================
+    ErrorDetail:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Machine-readable error code
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          additionalProperties: true
+          description: Additional error context or metadata
+
+    # ============================================
+    # CAPABILITY SCHEMA
+    # Stored in Control Plane database
+    # ============================================
+    Capability:
+      type: object
+      required: [id, version]
+      properties:
+        id:
+          type: string
+          description: "Unique capability identifier (namespace.name)"
+          pattern: "^[a-z0-9-]+\\.[a-z0-9-]+$"
+          example: "healthcare.pharmacy"
+
+        version:
+          type: string
+          description: "Semantic version of this capability"
+          pattern: "^\\d+\\.\\d+\\.\\d+$"
+          example: "2.1.0"
+
+        description:
+          type: string
+          description: "Human-readable description"
+
+        metadata:
+          $ref: '#/components/schemas/CapabilityMetadata'
+
+        domainObjects:
+          type: array
+          description: "Reusable type definitions"
+          items:
+            $ref: '#/components/schemas/DomainObject'
+
+        services:
+          type: array
+          description: "Service definitions"
+          items:
+            $ref: '#/components/schemas/Service'
+
+        events:
+          type: array
+          description: "Event definitions"
+          items:
+            $ref: '#/components/schemas/EventDefinition'
+
+        loops:
+          type: array
+          description: "Loop definitions"
+          items:
+            $ref: '#/components/schemas/Loop'
+
+        loopStacks:
+          type: array
+          description: "Loop stack definitions"
+          items:
+            $ref: '#/components/schemas/LoopStack'
+
+    CapabilityMetadata:
+      type: object
+      properties:
+        author:
+          type: string
+          description: "Author or team"
+        tags:
+          type: array
+          items:
+            type: string
+          description: "Tags for categorization"
+        stability:
+          type: string
+          enum: [experimental, beta, stable, deprecated]
+          default: stable
+        documentation:
+          type: string
+          format: uri
+          description: "Link to documentation"
+
+    # ============================================
+    # Domain Object
+    # ============================================
+    DomainObject:
+      type: object
+      required: [name, schema]
+      properties:
+        name:
+          type: string
+          description: "Name of the domain object"
+          example: "Drug"
+
+        description:
+          type: string
+          description: "Description of this domain object"
+
+        schema:
+          type: object
+          description: "JSON Schema definition"
+          additionalProperties: true
+
+        examples:
+          type: array
+          description: "Example instances"
+          items:
+            type: object
+            additionalProperties: true
+
+    # ============================================
+    # Service Definition
+    # ============================================
+    Service:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: "Service name"
+          example: "DrugQuery"
+
+        description:
+          type: string
+          description: "Service description"
+
+        timeout:
+          type: integer
+          description: "Default timeout in milliseconds"
+          default: 30000
+
+        retries:
+          type: integer
+          description: "Number of retry attempts"
+          default: 0
+
+        idempotent:
+          type: boolean
+          description: "Whether the service is idempotent"
+          default: false
+
+        input:
+          $ref: '#/components/schemas/SchemaReference'
+
+        output:
+          $ref: '#/components/schemas/SchemaReference'
+
+        errors:
+          type: array
+          description: "Possible error responses"
+          items:
+            $ref: '#/components/schemas/ErrorDefinition'
+
+    # ============================================
+    # Event Definition
+    # ============================================
+    EventDefinition:
+      type: object
+      required: [name, topic]
+      properties:
+        name:
+          type: string
+          description: "Event name"
+          example: "DrugRecalled"
+
+        description:
+          type: string
+          description: "Event description"
+
+        topic:
+          type: string
+          description: "Event topic identifier"
+          example: "drug.recalled"
+
+        ordering:
+          type: boolean
+          description: "Whether events must be ordered"
+          default: false
+
+        payload:
+          $ref: '#/components/schemas/SchemaReference'
+
+        filters:
+          type: array
+          description: "Filterable fields"
+          items:
+            $ref: '#/components/schemas/FilterDefinition'
+
+    # ============================================
+    # Loop Definition
+    # ============================================
+    Loop:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+          description: "Loop name"
+          example: "DrugInteractionCheck"
+
+        type:
+          type: string
+          enum: [aggregation, voting, bidding]
+          description: "Type of loop coordination"
+
+        description:
+          type: string
+          description: "Loop description"
+
+        recruitment:
+          $ref: '#/components/schemas/RecruitmentConfig'
+
+        execution:
+          $ref: '#/components/schemas/ExecutionConfig'
+
+        aggregation:
+          $ref: '#/components/schemas/AggregationConfig'
+
+        input:
+          $ref: '#/components/schemas/SchemaReference'
+
+        output:
+          $ref: '#/components/schemas/SchemaReference'
+
+    # ============================================
+    # Loop Stack Definition
+    # ============================================
+    LoopStack:
+      type: object
+      required: [name, loops]
+      properties:
+        name:
+          type: string
+          description: "Loop stack name"
+          example: "PharmacyNetworkSync"
+
+        description:
+          type: string
+          description: "Loop stack description"
+
+        input:
+          $ref: '#/components/schemas/SchemaReference'
+
+        output:
+          $ref: '#/components/schemas/SchemaReference'
+
+        loops:
+          type: array
+          description: "Ordered list of loops in the stack"
+          items:
+            type: object
+            required: [loopRef]
+            properties:
+              loopRef:
+                type: string
+                description: "Reference to loop in this capability"
+                example: "InventoryBroadcast"
+
+              condition:
+                type: string
+                description: "Optional condition for executing this loop"
+
+              allowSubLoops:
+                type: boolean
+                description: "Whether agents can spawn sub-loops"
+                default: true
+
+    # ============================================
+    # Supporting Schemas
+    # ============================================
+    SchemaReference:
+      type: object
+      description: "Reference to a domain object or inline schema"
+      properties:
+        domainObjectRef:
+          type: string
+          description: "Reference to domain object in this capability"
+          example: "Drug"
+
+        externalRef:
+          type: string
+          description: "Reference to external capability domain object"
+          example: "common.types/v1.0.0/Address"
+
+        inlineSchema:
+          type: object
+          description: "Inline JSON Schema (if not referencing domain object)"
+          additionalProperties: true
+
+        description:
+          type: string
+          description: "Description of this schema reference"
+
+        optional:
+          type: boolean
+          description: "Whether this input/output is optional"
+          default: false
+
+    ErrorDefinition:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          description: "Error code"
+          example: "DRUG_NOT_FOUND"
+
+        httpStatus:
+          type: integer
+          description: "HTTP status code equivalent"
+          example: 404
+
+        schema:
+          $ref: '#/components/schemas/SchemaReference'
+
+    FilterDefinition:
+      type: object
+      required: [field]
+      properties:
+        field:
+          type: string
+          description: "Field path in payload"
+          example: "severity"
+
+        description:
+          type: string
+          description: "Filter description"
+
+    RecruitmentConfig:
+      type: object
+      properties:
+        broadcastMessage:
+          $ref: '#/components/schemas/SchemaReference'
+
+        recruitmentTimeout:
+          type: integer
+          description: "Timeout in milliseconds for recruitment phase"
+          default: 5000
+
+        minParticipants:
+          type: integer
+          description: "Minimum number of participants required"
+          default: 1
+
+        maxParticipants:
+          type: integer
+          description: "Maximum number of participants allowed"
+
+    ExecutionConfig:
+      type: object
+      properties:
+        participantContribution:
+          $ref: '#/components/schemas/SchemaReference'
+
+        executionTimeout:
+          type: integer
+          description: "Timeout in milliseconds for execution phase"
+          default: 30000
+
+        waitStrategy:
+          type: string
+          enum: [all, quorum, any]
+          description: "How to wait for participant responses"
+          default: all
+
+    AggregationConfig:
+      type: object
+      properties:
+        strategy:
+          type: string
+          enum: [merge, sum, vote, rank, custom]
+          description: "How to aggregate participant contributions"
+          default: merge
+
+        quorum:
+          type: number
+          format: float
+          description: "Percentage of participants required (for voting)"
+          minimum: 0
+          maximum: 1
+          example: 0.67
+
+        customFunction:
+          type: string
+          description: "Name of custom aggregation function"
+
+    # ============================================
+    # CONTRACT SCHEMA
+    # Stored in Control Plane database
+    # ============================================
+    Contract:
+      type: object
+      required: [realmId, version]
+      properties:
+        realmId:
+          type: string
+          description: "Identifier of the realm this contract belongs to"
+          example: "realm_compute_002"
+
+        version:
+          type: string
+          description: "Version of this contract (realm-specific versioning)"
+          pattern: "^\\d+\\.\\d+\\.\\d+$"
+          example: "1.3.0"
+
+        description:
+          type: string
+          description: "Description of this contract"
+
+        provides:
+          $ref: '#/components/schemas/ContractProvides'
+
+        requires:
+          $ref: '#/components/schemas/ContractRequires'
+
+    ContractProvides:
+      type: object
+      description: "What this realm provides"
+      properties:
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceBinding'
+
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventBinding'
+
+        loops:
+          type: array
+          items:
+            $ref: '#/components/schemas/LoopBinding'
+
+        loopStacks:
+          type: array
+          items:
+            $ref: '#/components/schemas/LoopStackBinding'
+
+    ContractRequires:
+      type: object
+      description: "What this realm requires"
+      properties:
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceBinding'
+
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventBinding'
+
+    ServiceBinding:
+      type: object
+      required: [capabilityRef]
+      properties:
+        capabilityRef:
+          type: string
+          description: "Reference to capability service"
+          example: "healthcare.pharmacy/v2.1.0/DrugQuery"
+
+        endpoint:
+          type: string
+          description: "Internal endpoint (for provides)"
+          example: "internal://drug-service"
+
+        configuration:
+          type: object
+          description: "Realm-specific configuration overrides"
+          additionalProperties: true
+
+    EventBinding:
+      type: object
+      required: [capabilityRef]
+      properties:
+        capabilityRef:
+          type: string
+          description: "Reference to capability event"
+          example: "healthcare.pharmacy/v2.1.0/DrugRecalled"
+
+        configuration:
+          type: object
+          description: "Event-specific configuration"
+          properties:
+            filters:
+              type: array
+              description: "Event filters"
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                  values:
+                    type: array
+                    items:
+                      type: string
+
+            partitions:
+              type: integer
+              description: "Number of partitions (for provides)"
+
+            retentionDays:
+              type: integer
+              description: "Retention period in days (for provides)"
+
+    LoopBinding:
+      type: object
+      required: [capabilityRef]
+      properties:
+        capabilityRef:
+          type: string
+          description: "Reference to capability loop"
+          example: "healthcare.pharmacy/v2.1.0/DrugInteractionCheck"
+
+        configuration:
+          type: object
+          description: "Loop-specific configuration"
+          additionalProperties: true
+
+    LoopStackBinding:
+      type: object
+      required: [capabilityRef]
+      properties:
+        capabilityRef:
+          type: string
+          description: "Reference to capability loop stack"
+          example: "healthcare.pharmacy/v2.1.0/PharmacyNetworkSync"
+
+        configuration:
+          type: object
+          description: "Loop stack configuration"
+          additionalProperties: true

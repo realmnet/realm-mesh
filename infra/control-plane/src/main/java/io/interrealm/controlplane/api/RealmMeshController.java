@@ -1,6 +1,6 @@
 package io.interrealm.controlplane.api;
 
-import io.realmmesh.controlplane.controllers.RealmMeshApi;
+import io.realmmesh.controlplane.controllers.MeshApi;
 import io.realmmesh.controlplane.models.MeshInfo;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -11,7 +11,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1")
-public class RealmMeshController implements RealmMeshApi {
+public class RealmMeshController implements MeshApi {
 
     @Value("${realmmesh.id}")
     private String id;
