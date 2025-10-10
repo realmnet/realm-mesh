@@ -1,0 +1,159 @@
+capability:
+  name: messaging-service
+  version: 1.0.0
+  description: A capability for sending and receiving messages
+
+metadata:
+  author: RealmMesh Team
+  tags:
+    - messaging
+    - communication
+    - async
+  license: MIT
+
+interface:
+  operations:
+    - name: send_message
+      description: Send a message to a recipient
+      input:
+        parameters:
+          - name: recipient
+            type: string
+            required: true
+            description: The recipient's address
+          - name: content
+            type: string
+            required: true
+            description: The message content
+          - name: priority
+            type: string
+            required: false
+            default: normal
+            enum: [low, normal, high, urgent]
+      output:
+        type: object
+        schema:
+          type: object
+          properties:
+            messageId:
+              type: string
+            timestamp:
+              type: string
+            status:
+              type: string
+
+    - name: get_messages
+      description: Retrieve messages from the queue
+      input:
+        parameters:
+          - name: limit
+            type: integer
+            required: false
+            default: 10
+            description: Maximum number of messages to retrieve
+          - name: since
+            type: string
+            required: false
+            description: ISO timestamp to get messages since
+      output:
+        type: array
+        schema:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              sender:
+                type: string
+              content:
+                type: string
+              timestamp:
+                type: string
+
+    - name: delete_message
+      description: Delete a specific message
+      input:
+        parameters:
+          - name: message_id
+            type: string
+            required: true
+            description: The ID of the message to delete
+      output:
+        type: boolean
+
+  events:
+    - name: message_received
+      description: Triggered when a new message is received
+      payload:
+        type: object
+        schema:
+          type: object
+          properties:
+            messageId:
+              type: string
+            sender:
+              type: string
+            timestamp:
+              type: string
+
+    - name: message_deleted
+      description: Triggered when a message is deleted
+      payload:
+        type: object
+        schema:
+          type: object
+          properties:
+            messageId:
+              type: string
+            deletedBy:
+              type: string
+            timestamp:
+              type: string
+
+  errors:
+    - code: MSG_001
+      name: invalid_recipient
+      description: The recipient address is invalid or not found
+    - code: MSG_002
+      name: message_too_large
+      description: The message content exceeds the maximum allowed size
+    - code: MSG_003
+      name: message_not_found
+      description: The specified message ID was not found
+    - code: MSG_004
+      name: quota_exceeded
+      description: Message quota has been exceeded
+
+configuration:
+  parameters:
+    - name: max_message_size
+      type: integer
+      required: false
+      default: 1048576
+      description: Maximum message size in bytes
+    - name: queue_url
+      type: string
+      required: true
+      description: The URL of the message queue service
+    - name: retry_attempts
+      type: integer
+      required: false
+      default: 3
+      description: Number of retry attempts for failed operations
+    - name: timeout_seconds
+      type: integer
+      required: false
+      default: 30
+      description: Timeout for operations in seconds
+
+authorization:
+  roles:
+    - sender
+    - receiver
+    - admin
+  permissions:
+    - send_messages
+    - read_messages
+    - delete_messages
+    - manage_queue

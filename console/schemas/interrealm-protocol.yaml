@@ -1,0 +1,481 @@
+openapi: 3.1.0
+info:
+  title: InterRealm Protocol
+  version: 1.0.0
+  description: |
+    InterRealm Protocol for communication between RealmMesh instances. This protocol 
+    enables secure, contract-based communication across mesh boundaries with service 
+    invocation, event streaming, and capability discovery.
+  contact:
+    name: RealmMesh Team
+    url: https://realmmesh.io
+
+servers:
+  - url: https://{meshId}.realmmesh.io/interrealm/v1
+    description: Production mesh endpoint
+    variables:
+      meshId:
+        default: mesh-001
+        description: Target mesh identifier
+
+tags:
+  - name: Discovery
+    description: Capability and service discovery
+  - name: Invocation
+    description: Service invocation (RPC)
+  - name: Events
+    description: Event streaming (pub/sub)
+  - name: Health
+    description: Health and connectivity checks
+
+paths:
+  /discover/capabilities:
+    get:
+      tags: [Discovery]
+      summary: Discover available capabilities
+      operationId: discoverCapabilities
+      parameters:
+        - name: gateway
+          in: query
+          schema:
+            type: string
+          description: Filter by gateway
+        - name: capability
+          in: query
+          schema:
+            type: string
+          description: Filter by capability name pattern
+      responses:
+        '200':
+          description: List of available capabilities
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  meshId:
+                    type: string
+                  capabilities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CapabilityDescriptor'
+
+  /discover/services:
+    get:
+      tags: [Discovery]
+      summary: Discover available services
+      operationId: discoverServices
+      parameters:
+        - name: capability
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Capability reference
+      responses:
+        '200':
+          description: List of services for capability
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  capability:
+                    type: string
+                  services:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ServiceDescriptor'
+
+  /invoke/{capability}/{service}:
+    post:
+      tags: [Invocation]
+      summary: Invoke a service
+      operationId: invokeService
+      parameters:
+        - name: capability
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Capability reference (e.g., finance.payment-processing)
+        - name: service
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Service name (e.g., process-payment)
+        - name: X-Request-Id
+          in: header
+          schema:
+            type: string
+          description: Unique request identifier for tracing
+        - name: X-Source-Mesh
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Source mesh identifier
+        - name: X-Source-Gateway
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Source gateway identifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceRequest'
+      responses:
+        '200':
+          description: Service response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /events/subscribe:
+    post:
+      tags: [Events]
+      summary: Subscribe to event stream
+      operationId: subscribeToEvents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventSubscriptionRequest'
+      responses:
+        '200':
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventSubscriptionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /events/stream/{subscriptionId}:
+    get:
+      tags: [Events]
+      summary: Stream events (SSE)
+      operationId: streamEvents
+      parameters:
+        - name: subscriptionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events stream
+
+  /events/unsubscribe/{subscriptionId}:
+    delete:
+      tags: [Events]
+      summary: Unsubscribe from event stream
+      operationId: unsubscribeFromEvents
+      parameters:
+        - name: subscriptionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Unsubscribed successfully
+
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Mesh is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /health/connectivity:
+    post:
+      tags: [Health]
+      summary: Test connectivity to specific gateway
+      operationId: testConnectivity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                gatewayId:
+                  type: string
+                capability:
+                  type: string
+      responses:
+        '200':
+          description: Connectivity test result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectivityTestResult'
+
+components:
+  schemas:
+    CapabilityDescriptor:
+      type: object
+      required: [name, gatewayId, version]
+      properties:
+        name:
+          type: string
+          description: Capability reference (e.g., finance.payment-processing)
+        gatewayId:
+          type: string
+        version:
+          type: string
+        description:
+          type: string
+        services:
+          type: array
+          items:
+            type: string
+        events:
+          type: array
+          items:
+            type: string
+
+    ServiceDescriptor:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [rpc, stream]
+        description:
+          type: string
+        inputSchema:
+          type: object
+          description: JSON Schema for input
+        outputSchema:
+          type: object
+          description: JSON Schema for output
+
+    ServiceRequest:
+      type: object
+      required: [params]
+      properties:
+        params:
+          type: object
+          description: Service-specific parameters
+          additionalProperties: true
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+          description: Request metadata (tracing, auth, etc.)
+
+    ServiceResponse:
+      type: object
+      required: [result]
+      properties:
+        result:
+          type: object
+          description: Service-specific result
+          additionalProperties: true
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+
+    EventSubscriptionRequest:
+      type: object
+      required: [capability, events, sourceMesh, sourceGateway]
+      properties:
+        capability:
+          type: string
+          description: Capability reference
+        events:
+          type: array
+          items:
+            type: string
+          description: Event names to subscribe to
+        sourceMesh:
+          type: string
+        sourceGateway:
+          type: string
+        filter:
+          type: object
+          description: Event filtering criteria
+          additionalProperties: true
+
+    EventSubscriptionResponse:
+      type: object
+      required: [subscriptionId, streamUrl]
+      properties:
+        subscriptionId:
+          type: string
+        streamUrl:
+          type: string
+          format: uri
+          description: SSE stream endpoint
+        expiresAt:
+          type: string
+          format: date-time
+
+    Event:
+      type: object
+      required: [id, capability, name, timestamp, data]
+      properties:
+        id:
+          type: string
+          description: Unique event ID
+        capability:
+          type: string
+        name:
+          type: string
+          description: Event name (e.g., payment.completed)
+        timestamp:
+          type: string
+          format: date-time
+        data:
+          type: object
+          additionalProperties: true
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+
+    HealthResponse:
+      type: object
+      required: [status, meshId, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        meshId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        gateways:
+          type: array
+          items:
+            type: object
+            properties:
+              gatewayId:
+                type: string
+              status:
+                type: string
+                enum: [active, degraded, inactive]
+
+    ConnectivityTestResult:
+      type: object
+      required: [reachable, latency]
+      properties:
+        reachable:
+          type: boolean
+        latency:
+          type: integer
+          description: Latency in milliseconds
+        gatewayId:
+          type: string
+        capability:
+          type: string
+        error:
+          type: string
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [
+            BAD_REQUEST,
+            UNAUTHORIZED,
+            FORBIDDEN,
+            NOT_FOUND,
+            CAPABILITY_NOT_FOUND,
+            SERVICE_NOT_FOUND,
+            GATEWAY_UNREACHABLE,
+            CONTRACT_VIOLATION,
+            INTERNAL_ERROR
+          ]
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        requestId:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Forbidden - policy violation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  securitySchemes:
+    mtls:
+      type: mutualTLS
+      description: Mutual TLS authentication
+    jwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-InterRealm-Key
+
+security:
+  - mtls: []
+  - jwt: []
+  - apiKey: []

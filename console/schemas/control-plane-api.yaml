@@ -1,0 +1,1368 @@
+openapi: 3.1.0
+info:
+  title: RealmMesh Control Plane API
+  version: 1.0.0
+  description: |
+    Control Plane API for managing RealmMesh resources including Gateways, Pods, Agents, 
+    Bridges, Capabilities, and Contracts. This API provides CRUD operations and validation 
+    for all RealmMesh entities.
+  contact:
+    name: RealmMesh Team
+    url: https://realmmesh.io
+
+servers:
+  - url: https://api.realmmesh.io/v1
+    description: Production
+  - url: https://api-staging.realmmesh.io/v1
+    description: Staging
+  - url: http://localhost:8080/v1
+    description: Local Development
+
+tags:
+  - name: Mesh
+    description: Mesh initialization and management
+  - name: Gateways
+    description: Gateway management operations
+  - name: Pods
+    description: Pod (compute workload) management
+  - name: Agents
+    description: Native RealmMesh agent management
+  - name: Bridges
+    description: External system adapter management
+  - name: Capabilities
+    description: Capability definition management
+  - name: Contracts
+    description: Contract management and resolution
+  - name: Deployments
+    description: Deployment branching and lifecycle
+  - name: Routing
+    description: Routing graph and message streaming
+  - name: Validation
+    description: Resource validation and contract resolution
+
+paths:
+  /mesh/init:
+    post:
+      tags: [Mesh]
+      summary: Initialize new RealmMesh
+      operationId: initializeMesh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, environment]
+              properties:
+                name:
+                  type: string
+                environment:
+                  type: string
+                  enum: [development, staging, production]
+      responses:
+        '201':
+          description: Mesh initialized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  meshId:
+                    type: string
+                  rootGatewayId:
+                    type: string
+                  workspaceDir:
+                    type: string
+                    description: "Local workspace path"
+
+  /gateways:
+    get:
+      tags: [Gateways]
+      summary: List all gateways
+      operationId: listGateways
+      parameters:
+        - name: parent
+          in: query
+          schema:
+            type: string
+          description: Filter by parent gateway ID
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/RealmStatus'
+      responses:
+        '200':
+          description: List of gateways
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  gateways:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Gateway'
+    post:
+      tags: [Gateways]
+      summary: Create a new gateway
+      operationId: createGateway
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGatewayRequest'
+      responses:
+        '201':
+          description: Gateway created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Gateway'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /gateways/{gatewayId}:
+    parameters:
+      - $ref: '#/components/parameters/GatewayId'
+    get:
+      tags: [Gateways]
+      summary: Get gateway by ID
+      operationId: getGateway
+      responses:
+        '200':
+          description: Gateway details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Gateway'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Gateways]
+      summary: Update gateway
+      operationId: updateGateway
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGatewayRequest'
+      responses:
+        '200':
+          description: Gateway updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Gateway'
+    delete:
+      tags: [Gateways]
+      summary: Delete gateway
+      operationId: deleteGateway
+      responses:
+        '204':
+          description: Gateway deleted
+        '409':
+          description: Cannot delete gateway with children
+
+  /gateways/{gatewayId}/pods/init:
+    parameters:
+      - $ref: '#/components/parameters/GatewayId'
+    post:
+      tags: [Pods]
+      summary: Initialize pod project
+      description: Creates pod scaffold, generates SDK project
+      operationId: initializePod
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, language]
+              properties:
+                name:
+                  type: string
+                language:
+                  type: string
+                  enum: [typescript, python, java, go]
+      responses:
+        '201':
+          description: Pod project initialized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  podId:
+                    type: string
+                  projectPath:
+                    type: string
+                  availableCapabilities:
+                    type: array
+                    items:
+                      type: string
+                    description: "Capabilities this pod can consume"
+
+  /gateways/{gatewayId}/pods:
+    parameters:
+      - $ref: '#/components/parameters/GatewayId'
+    get:
+      tags: [Pods]
+      summary: List pods in gateway
+      operationId: listPods
+      responses:
+        '200':
+          description: List of pods
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pods:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Pod'
+    post:
+      tags: [Pods]
+      summary: Create a new pod
+      operationId: createPod
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePodRequest'
+      responses:
+        '201':
+          description: Pod created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pod'
+
+  /pods/{podId}:
+    parameters:
+      - $ref: '#/components/parameters/PodId'
+    get:
+      tags: [Pods]
+      summary: Get pod by ID
+      operationId: getPod
+      responses:
+        '200':
+          description: Pod details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pod'
+    put:
+      tags: [Pods]
+      summary: Update pod
+      operationId: updatePod
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePodRequest'
+      responses:
+        '200':
+          description: Pod updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pod'
+    delete:
+      tags: [Pods]
+      summary: Delete pod
+      operationId: deletePod
+      responses:
+        '204':
+          description: Pod deleted
+
+  /pods/{podId}/build:
+    parameters:
+      - $ref: '#/components/parameters/PodId'
+    post:
+      tags: [Pods]
+      summary: Build pod
+      description: Analyzes annotations, generates capability/contract YAMLs
+      operationId: buildPod
+      responses:
+        '200':
+          description: Pod built successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  capabilityGenerated:
+                    type: boolean
+                  contractGenerated:
+                    type: boolean
+                  dockerImage:
+                    type: string
+                  generatedFiles:
+                    type: object
+                    properties:
+                      capabilityYaml:
+                        type: string
+                      contractYaml:
+                        type: string
+                      podYaml:
+                        type: string
+
+  /pods/{podId}/deploy:
+    parameters:
+      - $ref: '#/components/parameters/PodId'
+    post:
+      tags: [Pods]
+      summary: Deploy pod
+      description: Creates deployment branch, validates, applies to K8s
+      operationId: deployPod
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  example: "myorg/payment-processor:v1.0.0"
+                replicas:
+                  type: integer
+                  default: 1
+      responses:
+        '202':
+          description: Deployment initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deploymentId:
+                    type: string
+                  status:
+                    type: string
+                    enum: [validating, deploying, active, failed]
+                  resources:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        kind:
+                          type: string
+                        name:
+                          type: string
+                        status:
+                          type: string
+
+  /gateways/{gatewayId}/bridges:
+    parameters:
+      - $ref: '#/components/parameters/GatewayId'
+    get:
+      tags: [Bridges]
+      summary: List bridges in gateway
+      operationId: listBridges
+      responses:
+        '200':
+          description: List of bridges
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bridges:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Bridge'
+    post:
+      tags: [Bridges]
+      summary: Create a new bridge
+      operationId: createBridge
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBridgeRequest'
+      responses:
+        '201':
+          description: Bridge created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bridge'
+
+  /bridges/{bridgeId}:
+    parameters:
+      - $ref: '#/components/parameters/BridgeId'
+    get:
+      tags: [Bridges]
+      summary: Get bridge by ID
+      operationId: getBridge
+      responses:
+        '200':
+          description: Bridge details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bridge'
+    delete:
+      tags: [Bridges]
+      summary: Delete bridge
+      operationId: deleteBridge
+      responses:
+        '204':
+          description: Bridge deleted
+
+  /gateways/{gatewayId}/capabilities/available:
+    parameters:
+      - $ref: '#/components/parameters/GatewayId'
+    get:
+      tags: [Capabilities]
+      summary: Get available capabilities for a pod
+      description: Returns capabilities this pod can consume based on gateway hierarchy
+      operationId: getAvailableCapabilities
+      responses:
+        '200':
+          description: Available capabilities
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  capabilities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AvailableCapability'
+
+  /gateways/{gatewayId}/capabilities:
+    parameters:
+      - $ref: '#/components/parameters/GatewayId'
+    get:
+      tags: [Capabilities]
+      summary: List capabilities in gateway
+      operationId: listCapabilities
+      responses:
+        '200':
+          description: List of capabilities
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  capabilities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Capability'
+    post:
+      tags: [Capabilities]
+      summary: Create a new capability
+      operationId: createCapability
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCapabilityRequest'
+      responses:
+        '201':
+          description: Capability created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Capability'
+
+  /capabilities/{capabilityId}/types:
+    parameters:
+      - name: capabilityId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Capabilities]
+      summary: Generate types for capability
+      description: Returns TypeScript/Python/etc types for SDK generation
+      operationId: generateCapabilityTypes
+      parameters:
+        - name: language
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [typescript, python, java, go]
+      responses:
+        '200':
+          description: Generated types
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  packageName:
+                    type: string
+                    example: "@interrealm/finance.payment-processing"
+                  files:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    description: "Map of filename → generated code"
+
+  /contracts:
+    get:
+      tags: [Contracts]
+      summary: List all contracts
+      operationId: listContracts
+      parameters:
+        - name: gatewayId
+          in: query
+          schema:
+            type: string
+        - name: podId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of contracts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  contracts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PodContract'
+
+  /contracts/{contractId}:
+    parameters:
+      - $ref: '#/components/parameters/ContractId'
+    get:
+      tags: [Contracts]
+      summary: Get contract by ID
+      operationId: getContract
+      responses:
+        '200':
+          description: Contract details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PodContract'
+
+  /contracts/{contractId}/resolve:
+    parameters:
+      - $ref: '#/components/parameters/ContractId'
+    post:
+      tags: [Contracts]
+      summary: Resolve contract requirements
+      operationId: resolveContract
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                requirements:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      capability:
+                        type: string
+                      gatewayId:
+                        type: string
+                        description: Gateway to resolve from
+      responses:
+        '200':
+          description: Contract resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractResolutionResult'
+
+  /deployments:
+    get:
+      tags: [Deployments]
+      summary: List deployments (branches)
+      operationId: listDeployments
+      responses:
+        '200':
+          description: List of deployments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deployments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Deployment'
+    post:
+      tags: [Deployments]
+      summary: Create deployment branch
+      operationId: createDeployment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  example: "add-payment-processor"
+                basedOn:
+                  type: string
+                  description: "Base deployment ID (defaults to current active)"
+      responses:
+        '201':
+          description: Deployment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+
+  /deployments/{deploymentId}/validate:
+    parameters:
+      - name: deploymentId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      tags: [Deployments]
+      summary: Validate deployment
+      operationId: validateDeployment
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  issues:
+                    type: array
+                    items:
+                      type: object
+
+  /deployments/{deploymentId}/apply:
+    parameters:
+      - name: deploymentId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      tags: [Deployments]
+      summary: Apply deployment to K8s
+      description: Creates/updates K8s CRDs in order
+      operationId: applyDeployment
+      responses:
+        '202':
+          description: Deployment applying
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [applying, applied, failed]
+                  appliedResources:
+                    type: array
+                    items:
+                      type: object
+
+  /routing/graph:
+    get:
+      tags: [Routing]
+      summary: Get routing graph
+      description: Shows which pods call which services
+      operationId: getRoutingGraph
+      responses:
+        '200':
+          description: Routing graph
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        type:
+                          type: string
+                          enum: [pod, capability, service]
+                        label:
+                          type: string
+                  edges:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        from:
+                          type: string
+                        to:
+                          type: string
+                        label:
+                          type: string
+
+  /routing/messages:
+    get:
+      tags: [Routing]
+      summary: Stream routing messages (SSE)
+      description: Real-time message flow
+      operationId: streamRoutingMessages
+      responses:
+        '200':
+          description: Message stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /validate:
+    post:
+      tags: [Validation]
+      summary: Validate RealmMesh configuration
+      operationId: validateConfiguration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                gateways:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Gateway'
+                pods:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Pod'
+                contracts:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/PodContract'
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResult'
+
+components:
+  parameters:
+    GatewayId:
+      name: gatewayId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Gateway ID
+    PodId:
+      name: podId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Pod ID
+    BridgeId:
+      name: bridgeId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Bridge ID
+    ContractId:
+      name: contractId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Contract ID
+
+  schemas:
+    RealmStatus:
+      type: string
+      enum: [active, degraded, inactive, error, pending, deploying]
+      description: Status of a realm or resource
+
+    RealmType:
+      type: string
+      enum: [root, gateway, pod, agent]
+      description: Type of realm
+
+    Gateway:
+      type: object
+      required: [id, name, type, status]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [gateway]
+        status:
+          $ref: '#/components/schemas/RealmStatus'
+        parent:
+          type: string
+          nullable: true
+          description: Parent gateway ID (null for root-level gateways)
+        providedCapabilities:
+          type: array
+          items:
+            type: string
+        requiredCapabilities:
+          type: array
+          items:
+            type: string
+        children:
+          type: array
+          items:
+            type: string
+          description: Child gateway IDs
+        routeTable:
+          type: array
+          items:
+            $ref: '#/components/schemas/RouteTableEntry'
+
+    Pod:
+      type: object
+      required: [id, name, type, status, gatewayId]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [pod]
+        status:
+          $ref: '#/components/schemas/RealmStatus'
+        gatewayId:
+          type: string
+          description: Parent gateway ID
+        replicas:
+          type: integer
+          minimum: 0
+          default: 1
+        image:
+          type: string
+          description: Container image
+        providedCapabilities:
+          type: array
+          items:
+            type: string
+        requiredCapabilities:
+          type: array
+          items:
+            type: string
+        contractId:
+          type: string
+          description: Associated contract ID
+
+    Bridge:
+      type: object
+      required: [id, name, type, status, gatewayId]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/BridgeType'
+        status:
+          $ref: '#/components/schemas/BridgeStatus'
+        gatewayId:
+          type: string
+        description:
+          type: string
+        config:
+          oneOf:
+            - $ref: '#/components/schemas/ServiceBridgeConfig'
+            - $ref: '#/components/schemas/InterRealmBridgeConfig'
+            - $ref: '#/components/schemas/EventBridgeConfig'
+        exposedServices:
+          type: array
+          items:
+            type: string
+        exposedEvents:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastHealthCheck:
+          type: string
+          format: date-time
+
+    BridgeType:
+      type: string
+      enum: [interrealm, service, grpc, graphql, event, database]
+
+    BridgeStatus:
+      type: string
+      enum: [connected, disconnected, error, configuring, pending]
+
+    ServiceBridgeConfig:
+      type: object
+      required: [baseUrl]
+      properties:
+        baseUrl:
+          type: string
+          format: uri
+        authentication:
+          type: object
+          properties:
+            type:
+              type: string
+              enum: [bearer, basic, apikey, oauth2]
+            credentials:
+              type: object
+              additionalProperties: true
+        timeout:
+          type: integer
+          description: Timeout in milliseconds
+        retries:
+          type: integer
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+
+    InterRealmBridgeConfig:
+      type: object
+      required: [targetMeshId, targetMeshUrl]
+      properties:
+        targetMeshId:
+          type: string
+        targetMeshUrl:
+          type: string
+          format: uri
+        authentication:
+          type: object
+          properties:
+            type:
+              type: string
+              enum: [mtls, jwt, apikey]
+            credentials:
+              type: object
+              additionalProperties: true
+        contractMappings:
+          type: array
+          items:
+            type: object
+            properties:
+              localCapabilityRef:
+                type: string
+              remoteCapabilityRef:
+                type: string
+
+    EventBridgeConfig:
+      type: object
+      required: [provider, connectionString]
+      properties:
+        provider:
+          type: string
+          enum: [kafka, rabbitmq, pubsub, sqs]
+        connectionString:
+          type: string
+        topics:
+          type: array
+          items:
+            type: string
+        consumerGroup:
+          type: string
+
+    Capability:
+      type: object
+      required: [id, name, gatewayId]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          description: Capability reference (e.g., finance.payment-processing)
+        gatewayId:
+          type: string
+        description:
+          type: string
+        version:
+          type: string
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContractService'
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContractEvent'
+
+    AvailableCapability:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        gateway:
+          type: string
+        services:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              inputType:
+                type: string
+              outputType:
+                type: string
+        domainObjects:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              schema:
+                type: object
+
+    PodContract:
+      type: object
+      required: [id, name, podId, gatewayId, provides, requires]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        podId:
+          type: string
+        gatewayId:
+          type: string
+        provides:
+          type: object
+          required: [capability, services, events]
+          properties:
+            capability:
+              type: string
+            services:
+              type: array
+              items:
+                $ref: '#/components/schemas/ContractService'
+            events:
+              type: array
+              items:
+                $ref: '#/components/schemas/ContractEvent'
+        requires:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContractRequirement'
+        version:
+          type: string
+        description:
+          type: string
+
+    ContractService:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [rpc, stream]
+        description:
+          type: string
+
+    ContractEvent:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [producer, consumer]
+        description:
+          type: string
+
+    ContractRequirement:
+      type: object
+      required: [capability]
+      properties:
+        capability:
+          type: string
+        services:
+          type: array
+          items:
+            type: string
+        events:
+          type: array
+          items:
+            type: string
+        resolved:
+          type: boolean
+        resolvedGateway:
+          type: string
+          description: Gateway ID that provides this capability
+
+    RouteTableEntry:
+      type: object
+      required: [capabilityRef, targetGatewayId, allowedSourceGateways, priority]
+      properties:
+        capabilityRef:
+          type: string
+        targetGatewayId:
+          type: string
+        allowedSourceGateways:
+          type: array
+          items:
+            type: string
+        priority:
+          type: integer
+
+    Deployment:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [draft, validating, valid, invalid, applying, active, failed]
+        resources:
+          type: array
+          items:
+            type: object
+            properties:
+              kind:
+                type: string
+                enum: [Gateway, Capability, Contract, Pod, Bridge]
+              name:
+                type: string
+              yaml:
+                type: string
+              action:
+                type: string
+                enum: [create, update, delete]
+        createdAt:
+          type: string
+          format: date-time
+        appliedAt:
+          type: string
+          format: date-time
+
+    ValidationResult:
+      type: object
+      required: [valid, errors, warnings]
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationError'
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationWarning'
+
+    ValidationError:
+      type: object
+      required: [id, nodeId, path, message, severity, category]
+      properties:
+        id:
+          type: string
+        nodeId:
+          type: string
+        path:
+          type: string
+        message:
+          type: string
+        severity:
+          type: string
+          enum: [error]
+        category:
+          type: string
+          enum: [contract, dependency, configuration, status]
+
+    ValidationWarning:
+      type: object
+      required: [id, nodeId, path, message, severity, category]
+      properties:
+        id:
+          type: string
+        nodeId:
+          type: string
+        path:
+          type: string
+        message:
+          type: string
+        severity:
+          type: string
+          enum: [warning]
+        category:
+          type: string
+          enum: [contract, dependency, configuration, status]
+
+    ContractResolutionResult:
+      type: object
+      properties:
+        contractId:
+          type: string
+        resolved:
+          type: boolean
+        resolutions:
+          type: array
+          items:
+            type: object
+            properties:
+              capability:
+                type: string
+              gatewayId:
+                type: string
+              available:
+                type: boolean
+
+    CreateGatewayRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        parent:
+          type: string
+          nullable: true
+        description:
+          type: string
+
+    UpdateGatewayRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          $ref: '#/components/schemas/RealmStatus'
+
+    CreatePodRequest:
+      type: object
+      required: [name, image]
+      properties:
+        name:
+          type: string
+        image:
+          type: string
+        replicas:
+          type: integer
+          minimum: 0
+          default: 1
+        contractId:
+          type: string
+
+    UpdatePodRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        image:
+          type: string
+        replicas:
+          type: integer
+        status:
+          $ref: '#/components/schemas/RealmStatus'
+
+    CreateBridgeRequest:
+      type: object
+      required: [name, type, config]
+      properties:
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/BridgeType'
+        description:
+          type: string
+        config:
+          oneOf:
+            - $ref: '#/components/schemas/ServiceBridgeConfig'
+            - $ref: '#/components/schemas/InterRealmBridgeConfig'
+            - $ref: '#/components/schemas/EventBridgeConfig'
+
+    CreateCapabilityRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        version:
+          type: string
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContractService'
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContractEvent'
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+security:
+  - bearerAuth: []
+  - apiKey: []

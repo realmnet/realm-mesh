@@ -1,0 +1,14 @@
+{
+  "name": "realm-mesh-mvp",
+  "version": "1.0.0",
+  "description": "RealmMesh MVP Demo - See agents coordinate in real-time",
+  "scripts": {
+    "demo": "node demo.js",
+    "setup": "npm install && cd agents/pricing-agent && npm install && cd ../inventory-agent && npm install && cd ../.."
+  },
+  "dependencies": {
+    "open": "^9.1.0",
+    "chalk": "^4.1.2",
+    "ws": "^8.14.2"
+  }
+}
