@@ -91,10 +91,8 @@ CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp);
 CREATE INDEX IF NOT EXISTS idx_metrics_timestamp ON metrics(timestamp);
 CREATE INDEX IF NOT EXISTS idx_metrics_type_realm ON metrics(metric_type, realm_id);
 
--- Initial root realm
-INSERT INTO realms (realm_id, display_name, realm_type, policies)
-VALUES ('root', 'Root Realm', 'root', '{"allow": "*"}')
-ON CONFLICT (realm_id) DO NOTHING;
+-- No default realms - they will be created dynamically
+-- Removed automatic seeding of root realm
 
 -- Helper function to get realm path
 CREATE OR REPLACE FUNCTION get_realm_path(realm_uuid UUID)

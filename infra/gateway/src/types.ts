@@ -6,6 +6,7 @@ export interface RealmInfo {
   capabilities: string[];
   isExternal: boolean;
   connectedAt: Date;
+  agents?: string[]; // For client model: list of agent names
 }
 
 export interface PendingRequest {

@@ -1,110 +1,138 @@
 const { spawn } = require('child_process');
-const chalk = require('chalk');
-const path = require('path');
+const http = require('http');
 
-console.log(chalk.bold.cyan('\n🚀 RealmMesh MVP Demo\n'));
-console.log(chalk.gray('Starting all components...\n'));
+console.log('🚀 Starting RealmMesh MVP Demo...\n');
 
 const processes = [];
 
-// Helper to spawn process with nice output
-function spawnProcess(name, command, args, cwd, color = 'white') {
-  const proc = spawn(command, args, {
-    cwd: cwd,
-    stdio: 'pipe',
-    shell: process.platform === 'win32' // Only use shell on Windows if needed
-  });
-
-  proc.stdout.on('data', (data) => {
-    const lines = data.toString().split('\n').filter(l => l.trim());
-    lines.forEach(line => {
-      console.log(chalk[color](`[${name}]`), line);
+// Function to check if a service is running
+function checkService(url, callback) {
+  const checkInterval = setInterval(() => {
+    http.get(url, (res) => {
+      if (res.statusCode === 200) {
+        clearInterval(checkInterval);
+        callback();
+      }
+    }).on('error', () => {
+      // Still waiting...
     });
-  });
+  }, 500);
+}
 
-  proc.stderr.on('data', (data) => {
-    console.error(chalk.red(`[${name} ERROR]`), data.toString());
+// Function to spawn a process with colored output
+function spawnProcess(name, command, args, options = {}) {
+  const proc = spawn(command, args, {
+    ...options,
+    stdio: 'inherit',
+    shell: true
   });
-
-  proc.on('close', (code) => {
-    if (code !== 0) {
-      console.error(chalk.red(`[${name}] Process exited with code ${code}`));
+  
+  proc.on('error', (err) => {
+    console.error(`❌ Failed to start ${name}:`, err.message);
+  });
+  
+  proc.on('exit', (code) => {
+    if (code !== 0 && code !== null) {
+      console.log(`⚠️  ${name} exited with code ${code}`);
     }
   });
-
+  
   processes.push({ name, proc });
   return proc;
 }
 
-// 1. Start Gateway
-console.log(chalk.yellow('📡 Starting Gateway...\n'));
+// Start gateway
+console.log('📡 Starting Gateway...');
 const gateway = spawnProcess(
   'Gateway',
   'npm',
   ['run', 'dev'],
-  path.join(__dirname, '../infra/gateway'),
-  'yellow'
+  { cwd: '../infra/gateway' }
 );
 
 // Wait for gateway to be ready
+console.log('⏳ Waiting for gateway to be ready...\n');
+
 setTimeout(() => {
-
-  // 2. Open Web Console
-  console.log(chalk.magenta('\n🖥️  Opening Web Console...\n'));
-  import('open').then(({ default: open }) => {
-    return open('http://localhost:3000');
-  }).catch(err => {
-    console.log(chalk.gray('Could not auto-open browser. Visit http://localhost:3000'));
-  });
-
-  // 3. Start Agents
-  setTimeout(() => {
-    console.log(chalk.green('\n🤖 Starting Agents...\n'));
-
-    const pricingAgent = spawnProcess(
-      'PricingAgent',
+  // Check if gateway is responding (admin API on port 3001)
+  checkService('http://localhost:3001', () => {
+    console.log('✅ Gateway is ready!\n');
+    
+    // Start web console
+    console.log('🖥️  Starting Web Console...');
+    const console_proc = spawnProcess(
+      'Console',
       'npm',
-      ['start'],
-      path.join(__dirname, 'agents/pricing-agent'),
-      'green'
+      ['run', 'dev'],
+      { cwd: '../apps/console' }
     );
-
-    const inventoryAgent = spawnProcess(
-      'InventoryAgent',
-      'npm',
-      ['start'],
-      path.join(__dirname, 'agents/inventory-agent'),
-      'blue'
-    );
-
-    // 4. Run Demo Scenario
+    
+    // Wait a bit for console to start
     setTimeout(() => {
-      console.log(chalk.cyan('\n🎬 Running demo scenario...\n'));
-      const scenario = spawnProcess(
-        'Scenario',
-        'node',
-        ['scenarios/price-check-scenario.js'],
-        __dirname,
-        'cyan'
+      console.log('✅ Console should be running at http://localhost:3000\n');
+      
+      // Start pricing agent
+      console.log('🤖 Starting Pricing Agent...');
+      const pricingAgent = spawnProcess(
+        'PricingAgent',
+        'npm',
+        ['start'],
+        { cwd: './agents/pricing-agent' }
       );
-    }, 4000);
+      
+      // Start inventory agent
+      setTimeout(() => {
+        console.log('🤖 Starting Inventory Agent...\n');
+        const inventoryAgent = spawnProcess(
+          'InventoryAgent',
+          'npm',
+          ['start'],
+          { cwd: './agents/inventory-agent' }
+        );
+        
+        // Run continuous orchestrator after agents are connected
+        setTimeout(() => {
+          console.log('🎪 Starting Continuous Demo Orchestrator...\n');
+          console.log('━'.repeat(60));
+          console.log('   This will cycle through:');
+          console.log('   1. 🔄 Loop Coordination');
+          console.log('   2. 📞 Service Calls (RPC)');
+          console.log('   3. 📨 Event Publishing');
+          console.log('━'.repeat(60) + '\n');
 
-  }, 2000);
-
+          const orchestrator = spawnProcess(
+            'Orchestrator',
+            'node',
+            ['./scenarios/continuous-demo.js']
+          );
+        }, 3000);
+      }, 2000);
+    }, 2000);
+  });
 }, 3000);
 
 // Cleanup on exit
-process.on('SIGINT', () => {
-  console.log(chalk.yellow('\n\n👋 Shutting down demo...\n'));
-
+function cleanup() {
+  console.log('\n\n👋 Shutting down all processes...\n');
   processes.forEach(({ name, proc }) => {
-    console.log(chalk.gray(`Stopping ${name}...`));
-    proc.kill();
+    console.log(`   Stopping ${name}...`);
+    proc.kill('SIGTERM');
   });
-
+  
   setTimeout(() => {
+    processes.forEach(({ proc }) => proc.kill('SIGKILL'));
     process.exit(0);
-  }, 1000);
-});
+  }, 2000);
+}
 
-console.log(chalk.gray('\nPress Ctrl+C to stop the demo\n'));
+process.on('SIGINT', cleanup);
+process.on('SIGTERM', cleanup);
+
+// Keep the script running
+console.log('\n📊 All services started!');
+console.log('━'.repeat(60));
+console.log('   Gateway:      http://localhost:8080');
+console.log('   Web Console:  http://localhost:3000');
+console.log('   Agents:       2 active');
+console.log('━'.repeat(60));
+console.log('\nPress Ctrl+C to stop all services.\n');

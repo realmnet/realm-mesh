@@ -33,13 +33,15 @@ model Realm {
   children Realm[] @relation("RealmHierarchy")
 
   // Relations
-  services    Service[]
-  routes      Route[]
-  connections Connection[]
-  auditLogs   AuditLog[]     @relation("AuditSourceRealm")
-  targetLogs  AuditLog[]     @relation("AuditTargetRealm")
-  metrics     Metric[]
-  events      RealmEvent[]
+  services          Service[]
+  routes            Route[]
+  connections       Connection[]
+  auditLogs         AuditLog[]          @relation("AuditSourceRealm")
+  targetLogs        AuditLog[]          @relation("AuditTargetRealm")
+  metrics           Metric[]
+  events            RealmEvent[]
+  clients           Client[]
+  clientRealmAccess ClientRealmAccess[]
 
   @@index([parentId], name: "idx_realms_parent")
   @@index([realmId], name: "idx_realms_realm_id")
@@ -193,4 +195,150 @@ model Metric {
   @@index([timestamp], name: "idx_metrics_timestamp")
   @@index([metricType, realmId], name: "idx_metrics_type_realm")
   @@map("metrics")
+}
+
+// ============================================
+// Client/Agent/Participant Model
+// ============================================
+
+// Clients (applications that connect to the gateway)
+model Client {
+  id            String    @id @db.VarChar(255)
+  name          String    @db.VarChar(255)
+  realmId       String    @map("realm_id") @db.Uuid
+  authToken     String    @unique @map("auth_token") @db.VarChar(512)
+  connectionId  String?   @map("connection_id") @db.VarChar(255)
+  status        String    @default("disconnected") @db.VarChar(50)
+  lastConnected DateTime? @map("last_connected") @db.Timestamp(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  realm               Realm                @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  capabilities        ClientCapability[]
+  agents              ClientAgent[]
+  realmAccess         ClientRealmAccess[]
+  loopStatesInitiated LoopState[]
+  loopParticipants    LoopParticipant[]
+  eventSubscriptions  EventSubscription[]
+
+  @@index([realmId], name: "idx_clients_realm")
+  @@index([status], name: "idx_clients_status")
+  @@map("clients")
+}
+
+// Client capabilities (what services/agents/loops a client provides)
+model ClientCapability {
+  id             String   @id @default(uuid()) @db.Uuid
+  clientId       String   @map("client_id") @db.VarChar(255)
+  capabilityType String   @map("capability_type") @db.VarChar(50) // 'service', 'agent', 'loop', 'loopstack', 'event-handler'
+  capabilityName String   @map("capability_name") @db.VarChar(255)
+  metadata       Json     @default("{}") @db.JsonB
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, capabilityType, capabilityName])
+  @@index([clientId], name: "idx_client_capabilities_client")
+  @@index([capabilityType], name: "idx_client_capabilities_type")
+  @@map("client_capabilities")
+}
+
+// Client agents (specific agent definitions)
+model ClientAgent {
+  id             String   @id @default(uuid()) @db.Uuid
+  clientId       String   @map("client_id") @db.VarChar(255)
+  agentName      String   @map("agent_name") @db.VarChar(255)
+  participatesIn String[] @map("participates_in")
+  skills         String[]
+  metadata       Json     @default("{}") @db.JsonB
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, agentName])
+  @@index([clientId], name: "idx_client_agents_client")
+  @@map("client_agents")
+}
+
+// Client realm access control
+model ClientRealmAccess {
+  clientId     String   @map("client_id") @db.VarChar(255)
+  realmId      String   @map("realm_id") @db.Uuid
+  accessGranted Boolean  @default(true) @map("access_granted")
+  grantedAt    DateTime @default(now()) @map("granted_at") @db.Timestamp(6)
+  grantedBy    String?  @map("granted_by") @db.VarChar(255)
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  realm  Realm  @relation(fields: [realmId], references: [id], onDelete: Cascade)
+
+  @@id([clientId, realmId])
+  @@index([clientId], name: "idx_client_realm_access_client")
+  @@index([realmId], name: "idx_client_realm_access_realm")
+  @@map("client_realm_access")
+}
+
+// Loop states (tracking active loops)
+model LoopState {
+  id                  String              @id @db.VarChar(255)
+  loopName            String              @map("loop_name") @db.VarChar(255)
+  capability          String?             @db.VarChar(255)
+  initiatorClientId   String?             @map("initiator_client_id") @db.VarChar(255)
+  phase               String              @default("recruitment") @db.VarChar(50) // recruitment, execution, aggregation, complete, failed
+  input               Json?               @db.JsonB
+  result              Json?               @db.JsonB
+  recruitmentTimeout  Int?                @map("recruitment_timeout")
+  executionTimeout    Int?                @map("execution_timeout")
+  minParticipants     Int?                @map("min_participants")
+  maxParticipants     Int?                @map("max_participants")
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt           DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  completedAt         DateTime?           @map("completed_at") @db.Timestamp(6)
+
+  initiatorClient Client?           @relation(fields: [initiatorClientId], references: [id], onDelete: SetNull)
+  participants    LoopParticipant[]
+
+  @@index([phase], name: "idx_loop_states_phase")
+  @@index([createdAt], name: "idx_loop_states_created")
+  @@map("loop_states")
+}
+
+// Loop participants (agents participating in specific loops)
+model LoopParticipant {
+  id                  String    @id @default(uuid()) @db.Uuid
+  loopId              String    @map("loop_id") @db.VarChar(255)
+  clientId            String    @map("client_id") @db.VarChar(255)
+  agentName           String    @map("agent_name") @db.VarChar(255)
+  participantId       String    @map("participant_id") @db.VarChar(512) // composite: client_id.agent_name
+  status              String    @default("recruited") @db.VarChar(50) // recruited, executing, complete, failed
+  joinedAt            DateTime  @default(now()) @map("joined_at") @db.Timestamp(6)
+  startedExecutionAt  DateTime? @map("started_execution_at") @db.Timestamp(6)
+  completedAt         DateTime? @map("completed_at") @db.Timestamp(6)
+  result              Json?     @db.JsonB
+  error               String?   @db.Text
+
+  loop   LoopState @relation(fields: [loopId], references: [id], onDelete: Cascade)
+  client Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([loopId, participantId])
+  @@index([loopId], name: "idx_loop_participants_loop")
+  @@index([clientId], name: "idx_loop_participants_client")
+  @@index([status], name: "idx_loop_participants_status")
+  @@map("loop_participants")
+}
+
+// Event subscriptions
+model EventSubscription {
+  id          String   @id @default(uuid()) @db.Uuid
+  clientId    String   @map("client_id") @db.VarChar(255)
+  topic       String   @db.VarChar(255)
+  handlerName String?  @map("handler_name") @db.VarChar(255)
+  filters     Json     @default("{}") @db.JsonB
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, topic, handlerName])
+  @@index([clientId], name: "idx_event_subscriptions_client")
+  @@index([topic], name: "idx_event_subscriptions_topic")
+  @@map("event_subscriptions")
 }

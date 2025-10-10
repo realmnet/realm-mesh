@@ -1,165 +1,296 @@
 const WebSocket = require('ws');
-const chalk = require('chalk');
 
-class PricingAgent {
-  constructor() {
-    this.agentId = 'pricing-agent-1';
-    this.ws = null;
-    this.activeLoops = new Map();
-  }
+const CLIENT_ID = 'pricing-client-1';
+const GATEWAY_URL = process.env.GATEWAY_URL || 'ws://localhost:8080';
+const AGENT_NAME = 'PricingAgent';
 
-  async connect() {
-    return new Promise((resolve, reject) => {
-      console.log(chalk.green('💰 PricingAgent connecting to gateway...'));
+console.log(`🚀 Starting ${AGENT_NAME}...`);
+console.log(`📡 Connecting to gateway: ${GATEWAY_URL}`);
 
-      this.ws = new WebSocket('ws://localhost:8080');
+const ws = new WebSocket(GATEWAY_URL);
+const pendingRequests = new Map();
 
-      this.ws.on('open', () => {
-        console.log(chalk.green('✅ PricingAgent connected!'));
-        this.sendHandshake();
-        resolve();
-      });
+ws.on('open', () => {
+  console.log(`✅ Connected to gateway`);
 
-      this.ws.on('message', (data) => {
-        this.handleMessage(JSON.parse(data.toString()));
-      });
-
-      this.ws.on('error', (error) => {
-        console.error(chalk.red('❌ PricingAgent error:'), error.message);
-        reject(error);
-      });
-
-      this.ws.on('close', () => {
-        console.log(chalk.yellow('👋 PricingAgent disconnected'));
-      });
-    });
-  }
-
-  sendHandshake() {
-    this.send({
-      type: 'register-realm',
-      payload: {
-        realmId: this.agentId,
-        services: ['price-calculation', 'discount-calculation'],
-        capabilities: ['pricing'],
-        authToken: 'demo-token'
+  // Send client handshake
+  ws.send(JSON.stringify({
+    type: 'client-handshake',
+    payload: {
+      clientId: CLIENT_ID,
+      authToken: 'demo-token-pricing',
+      provides: {
+        agents: [
+          {
+            name: AGENT_NAME,
+            participatesIn: ['PriceCheck', 'PriceAggregation'],
+            skills: ['dynamic-pricing', 'cost-calculation']
+          }
+        ],
+        services: ['CalculatePrice', 'ApplyDiscount'],
+        eventHandlers: ['order.created', 'inventory.updated']
+      },
+      consumes: {
+        services: ['GetInventory'],
+        events: ['order.completed']
       }
-    });
-  }
-
-  handleMessage(message) {
-    switch (message.type) {
-      case 'discovery-response':
-        console.log(chalk.green('🤝 Handshake acknowledged'));
-        break;
-
-      case 'loop-recruitment':
-        this.handleRecruitment(message.payload);
-        break;
-
-      case 'loop-execute':
-        this.handleExecution(message.payload);
-        break;
-
-      case 'loop-complete':
-        this.handleComplete(message.payload);
-        break;
     }
+  }));
+});
+
+ws.on('message', (data) => {
+  const msg = JSON.parse(data.toString());
+
+  switch (msg.type) {
+    case 'client-handshake-ack':
+      console.log(`✅ Handshake complete! Client ID: ${msg.payload.clientId}`);
+      console.log(`📋 Available capabilities:`, msg.payload.availableCapabilities);
+
+      // Subscribe to events
+      ws.send(JSON.stringify({
+        type: 'event-subscribe',
+        payload: { topic: 'order.created' }
+      }));
+      break;
+
+    case 'subscription-confirmed':
+      console.log(`📫 Subscribed to topic: ${msg.payload.topic}`);
+      break;
+
+    case 'loop-recruitment':
+      handleRecruitment(msg.payload);
+      break;
+
+    case 'loop-execute':
+      handleExecution(msg.payload);
+      break;
+
+    case 'loop-complete':
+      handleLoopComplete(msg.payload);
+      break;
+
+    case 'service-call':
+      handleServiceCall(msg.payload);
+      break;
+
+    case 'service-response':
+      handleServiceResponse(msg.payload);
+      break;
+
+    case 'event':
+      handleEvent(msg.payload);
+      break;
+
+    default:
+      console.log(`📨 Received: ${msg.type}`);
   }
+});
 
-  handleRecruitment(payload) {
-    const { loopId, loopName, recruitmentMessage } = payload;
+// ============================================
+// Loop Participation
+// ============================================
 
-    console.log(chalk.cyan(`\n🔔 Recruited for loop: ${loopName}`));
-    console.log(chalk.gray(`   Loop ID: ${loopId}`));
-    console.log(chalk.gray(`   Request: ${JSON.stringify(recruitmentMessage)}`));
+function handleRecruitment(payload) {
+  const { loopId, loopName, capability, recruitmentMessage } = payload;
 
-    // Accept participation
-    const accepts = true;
-    console.log(chalk.green(`   ✓ Accepting participation`));
+  console.log(`\n🔔 Recruitment for loop: ${loopName} (${loopId})`);
+  console.log(`   Input:`, recruitmentMessage);
 
-    this.send({
-      type: 'loop-recruitment-response',
-      payload: {
-        loopId,
-        agentId: this.agentId,
-        accepts,
-        bid: {
-          confidence: 0.95,
-          estimatedTime: 100
+  // Decide whether to participate
+  const shouldAccept = true; // For MVP, always accept
+
+  console.log(`   Decision: ${shouldAccept ? '✅ ACCEPT' : '❌ DECLINE'}`);
+
+  // Send response
+  ws.send(JSON.stringify({
+    type: 'loop-recruitment-response',
+    payload: {
+      loopId,
+      agentId: CLIENT_ID,
+      accepts: shouldAccept,
+      bid: {
+        confidence: 0.95,
+        estimatedTime: 100
+      }
+    }
+  }));
+}
+
+function handleExecution(payload) {
+  const { loopId, loopName, input } = payload;
+
+  console.log(`\n⚡ Executing loop: ${loopName} (${loopId})`);
+  console.log(`   Input:`, input);
+
+  // Simulate pricing calculation
+  const basePrice = 100;
+  const discount = Math.random() * 20;
+  const finalPrice = (basePrice - discount).toFixed(2);
+
+  console.log(`   💰 Calculated price: $${finalPrice}`);
+
+  // Send result
+  ws.send(JSON.stringify({
+    type: 'loop-execute-response',
+    payload: {
+      loopId,
+      agentId: CLIENT_ID,
+      result: {
+        price: parseFloat(finalPrice),
+        confidence: 0.95,
+        agent: AGENT_NAME,
+        breakdown: {
+          basePrice,
+          discount: discount.toFixed(2)
         }
       }
-    });
-  }
-
-  async handleExecution(payload) {
-    const { loopId, loopName, input } = payload;
-
-    console.log(chalk.magenta(`\n⚡ Executing: ${loopName}`));
-    console.log(chalk.gray(`   Product: ${input.productId}`));
-    console.log(chalk.gray(`   Quantity: ${input.quantity}`));
-
-    // Simulate pricing calculation
-    await this.sleep(1000);
-
-    const basePrice = 100;
-    const bulkDiscount = input.quantity >= 10 ? 15 : 0;
-    const dynamicDiscount = Math.floor(Math.random() * 10);
-    const finalPrice = basePrice - bulkDiscount - dynamicDiscount;
-
-    const result = {
-      price: finalPrice,
-      breakdown: {
-        basePrice,
-        bulkDiscount,
-        dynamicDiscount
-      },
-      confidence: 0.95,
-      source: 'PricingAgent'
-    };
-
-    console.log(chalk.green(`   💵 Calculated price: ${finalPrice}`));
-    console.log(chalk.gray(`   Confidence: 95%`));
-
-    this.send({
-      type: 'loop-execute-response',
-      payload: {
-        loopId,
-        agentId: this.agentId,
-        result
-      }
-    });
-  }
-
-  handleComplete(payload) {
-    const { loopId, result } = payload;
-    console.log(chalk.blue(`\n✅ Loop complete!`));
-    console.log(chalk.gray(`   Final result: ${JSON.stringify(result, null, 2)}`));
-  }
-
-  send(message) {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(message));
     }
+  }));
+}
+
+function handleLoopComplete(payload) {
+  const { loopId, result } = payload;
+
+  console.log(`\n✅ Loop complete: ${loopId}`);
+  console.log(`   Final result:`, result);
+}
+
+// ============================================
+// Service Calls (RPC)
+// ============================================
+
+function handleServiceCall(payload) {
+  const { requestId, capability, service, input, callerRealm } = payload;
+
+  console.log(`\n📞 Service call: ${service} from ${callerRealm}`);
+  console.log(`   Request ID: ${requestId}`);
+  console.log(`   Input:`, input);
+
+  // Simulate service processing
+  let result;
+
+  if (service.includes('CalculatePrice')) {
+    const basePrice = input.basePrice || 100;
+    const quantity = input.quantity || 1;
+    const discount = input.applyDiscount ? 10 : 0;
+
+    result = {
+      price: (basePrice * quantity * (1 - discount/100)).toFixed(2),
+      quantity,
+      discount: `${discount}%`,
+      calculatedBy: AGENT_NAME
+    };
+  } else if (service.includes('ApplyDiscount')) {
+    result = {
+      originalPrice: input.price,
+      discountedPrice: (input.price * 0.9).toFixed(2),
+      discountPercent: 10
+    };
+  } else {
+    result = { error: 'Unknown service' };
   }
 
-  sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+  console.log(`   💰 Result:`, result);
+
+  // Send response
+  ws.send(JSON.stringify({
+    type: 'service-response',
+    payload: {
+      requestId,
+      result
+    }
+  }));
+}
+
+function handleServiceResponse(payload) {
+  const { requestId, result, error } = payload;
+
+  console.log(`\n📥 Service response for request: ${requestId}`);
+  if (error) {
+    console.log(`   ❌ Error:`, error);
+  } else {
+    console.log(`   ✅ Result:`, result);
+  }
+
+  // Resolve pending request
+  const resolve = pendingRequests.get(requestId);
+  if (resolve) {
+    resolve(result);
+    pendingRequests.delete(requestId);
   }
 }
 
-// Start the agent
-const agent = new PricingAgent();
-agent.connect().catch(err => {
-  console.error('Failed to start agent:', err);
-  process.exit(1);
+// Helper to call other services
+function callService(capability, service, input) {
+  return new Promise((resolve) => {
+    const requestId = `req-${Date.now()}-${Math.random()}`;
+    pendingRequests.set(requestId, resolve);
+
+    ws.send(JSON.stringify({
+      type: 'service-call',
+      payload: {
+        requestId,
+        capability,
+        service,
+        input
+      }
+    }));
+
+    // Timeout after 30s
+    setTimeout(() => {
+      if (pendingRequests.has(requestId)) {
+        pendingRequests.delete(requestId);
+        resolve({ error: 'timeout' });
+      }
+    }, 30000);
+  });
+}
+
+// ============================================
+// Event Handling (Pub/Sub)
+// ============================================
+
+function handleEvent(payload) {
+  const { topic, data, publisher, timestamp } = payload;
+
+  console.log(`\n📨 Event received on topic: ${topic}`);
+  console.log(`   Publisher: ${publisher}`);
+  console.log(`   Data:`, data);
+  console.log(`   Timestamp: ${timestamp}`);
+
+  // Handle different event types
+  if (topic === 'order.created') {
+    console.log(`   💡 New order detected! Recalculating pricing...`);
+  } else if (topic === 'inventory.updated') {
+    console.log(`   📦 Inventory updated! Adjusting prices...`);
+  }
+}
+
+// Helper to publish events
+function publishEvent(topic, data) {
+  console.log(`\n📤 Publishing event to topic: ${topic}`);
+  ws.send(JSON.stringify({
+    type: 'event-publish',
+    payload: {
+      topic,
+      payload: data
+    }
+  }));
+}
+
+ws.on('close', () => {
+  console.log('❌ Disconnected from gateway');
+  process.exit(0);
+});
+
+ws.on('error', (error) => {
+  console.error('❌ WebSocket error:', error.message);
 });
 
 // Graceful shutdown
 process.on('SIGINT', () => {
-  console.log(chalk.yellow('\n👋 Shutting down PricingAgent...'));
-  if (agent.ws) {
-    agent.ws.close();
-  }
-  process.exit(0);
+  console.log('\n👋 Shutting down...');
+  ws.close();
 });
+
+console.log('⏳ Waiting for connection...');

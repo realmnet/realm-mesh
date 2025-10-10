@@ -1,29 +1,16 @@
 const WebSocket = require('ws');
-const chalk = require('chalk');
 
-console.log(chalk.bold.cyan('\n🎬 Price Check Scenario'));
-console.log(chalk.gray('Initiating a loop to check price and inventory...\n'));
+console.log('🎬 Starting Price Check Scenario...\n');
 
 const ws = new WebSocket('ws://localhost:8080');
 
 ws.on('open', () => {
-  console.log(chalk.green('✅ Connected to gateway\n'));
-
-  // Send handshake
-  ws.send(JSON.stringify({
-    type: 'register-realm',
-    payload: {
-      realmId: 'demo-scenario',
-      services: [],
-      capabilities: [],
-      authToken: 'demo-token'
-    }
-  }));
-
+  console.log('✅ Connected to gateway\n');
+  
+  // Wait a moment for agents to be ready
   setTimeout(() => {
-    console.log(chalk.cyan('📤 Initiating PriceCheck loop...\n'));
-
-    // Initiate a loop
+    console.log('🚀 Initiating PriceCheck loop...\n');
+    
     ws.send(JSON.stringify({
       type: 'loop-initiate',
       payload: {
@@ -32,7 +19,7 @@ ws.on('open', () => {
         loopName: 'PriceCheck',
         input: {
           productId: 'PROD-123',
-          quantity: 15
+          quantity: 10
         },
         options: {
           recruitmentTimeout: 5000,
@@ -41,55 +28,42 @@ ws.on('open', () => {
         }
       }
     }));
-  }, 1000);
+  }, 2000);
 });
 
 ws.on('message', (data) => {
-  const message = JSON.parse(data.toString());
-
-  switch (message.type) {
-    case 'discovery-response':
-      console.log(chalk.green('🤝 Scenario connected\n'));
-      break;
-
+  const msg = JSON.parse(data.toString());
+  
+  switch (msg.type) {
     case 'loop-recruitment-complete':
-      console.log(chalk.yellow(`📋 Recruitment complete: ${message.payload.participantCount} agents recruited\n`));
+      console.log(`📋 Recruitment complete: ${msg.payload.participantCount} participants\n`);
       break;
-
-    case 'loop-execution-complete':
-      console.log(chalk.blue('⚙️  All agents finished executing\n'));
-      break;
-
+      
     case 'loop-complete':
-      console.log(chalk.bold.green('\n✅ LOOP COMPLETE!\n'));
-      console.log(chalk.white('Final Result:'));
-      console.log(JSON.stringify(message.payload.result, null, 2));
-      console.log('');
-
-      setTimeout(() => {
-        ws.close();
-        process.exit(0);
-      }, 1000);
+      console.log('\n✅ Loop Complete!');
+      console.log('━'.repeat(50));
+      console.log(JSON.stringify(msg.payload.result, null, 2));
+      console.log('━'.repeat(50));
+      console.log(`\nDuration: ${msg.payload.duration}ms`);
+      console.log(`\n🎉 Demo complete! Press Ctrl+C to exit.\n`);
       break;
-
+      
     case 'loop-failed':
-      console.log(chalk.bold.red('\n❌ LOOP FAILED!\n'));
-      console.log(chalk.red('Reason:'), message.payload.reason);
-      console.log('');
-
-      setTimeout(() => {
-        ws.close();
-        process.exit(1);
-      }, 1000);
+      console.error('\n❌ Loop Failed!');
+      console.error(msg.payload);
+      process.exit(1);
       break;
   }
 });
 
 ws.on('error', (error) => {
-  console.error(chalk.red('❌ Scenario error:'), error.message);
+  console.error('❌ Connection error:', error.message);
+  console.error('\nMake sure the gateway is running on ws://localhost:8080');
   process.exit(1);
 });
 
-ws.on('close', () => {
-  console.log(chalk.gray('👋 Scenario disconnected'));
+process.on('SIGINT', () => {
+  console.log('\n👋 Shutting down scenario...');
+  ws.close();
+  process.exit(0);
 });

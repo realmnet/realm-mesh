@@ -42,6 +42,15 @@ export class WebSocketHandler {
             realmInfo = this.routeTable.get(realmId) || null;
             break;
 
+          case 'client-handshake':
+            await this.handleClientHandshake(ws, msg, isExternal);
+            const clientId = (msg.payload as any).clientId as string;
+            if (clientId) {
+              realmId = clientId; // For backwards compatibility with route table
+              realmInfo = this.routeTable.get(clientId) || null;
+            }
+            break;
+
           case 'service-call':
             await this.handleServiceCall(ws, msg, realmId, isExternal);
             break;
@@ -92,11 +101,11 @@ export class WebSocketHandler {
 
         // Notify admin console
         this.broadcastToAdmin({
-          type: 'realm-disconnected',
-          payload: { realmId }
+          type: 'client-disconnected',
+          payload: { clientId: realmId }
         });
 
-        console.log(`Disconnected: ${realmId}`);
+        console.log(`Client disconnected: ${realmId}`);
       }
     });
 
@@ -184,6 +193,78 @@ export class WebSocketHandler {
     });
 
     console.log(`Registered: ${realmId} with ${services.length} services`);
+  }
+
+  private async handleClientHandshake(ws: ExtendedWebSocket, msg: Message, isExternal: boolean): Promise<void> {
+    const { clientId, authToken, provides = {}, consumes = {} } = msg.payload as any;
+
+    console.log(`🤝 Client handshake from: ${clientId}`);
+
+    // TODO: Validate auth token from database
+    // const client = await this.pool.query(
+    //   'SELECT * FROM clients WHERE id = $1 AND auth_token = $2',
+    //   [clientId, authToken]
+    // );
+    // if (client.rows.length === 0) {
+    //   ws.send(JSON.stringify({
+    //     type: 'error',
+    //     payload: { error: 'Invalid client credentials' }
+    //   }));
+    //   ws.close();
+    //   return;
+    // }
+
+    // Extract agent names from provides
+    const agents = provides.agents || [];
+    const agentNames = agents.map((a: any) => typeof a === 'string' ? a : a.name);
+
+    // Add to route table (using clientId as key)
+    ws.realmId = clientId;
+    this.routeTable.set(clientId, {
+      socket: ws,
+      services: provides.services || [],
+      capabilities: provides.agents || [],  // Store agents as capabilities for now
+      isExternal,
+      connectedAt: new Date(),
+      agents: agentNames  // Store agent list
+    });
+
+    // TODO: Store in database
+    // await this.pool.query(
+    //   'UPDATE clients SET status = $1, last_connected = NOW(), connection_id = $2 WHERE id = $3',
+    //   ['connected', ws.id, clientId]
+    // );
+
+    // Load policies (for MVP, use default)
+    const policies: string[] = ['allow:*'];
+
+    // Build discovery directory
+    const directory = await this.buildDirectory(clientId, policies, isExternal);
+
+    // Send handshake acknowledgment
+    ws.send(JSON.stringify({
+      type: 'client-handshake-ack',
+      payload: {
+        clientId,
+        status: 'connected',
+        policies,
+        ...directory
+      }
+    }));
+
+    // Notify admin console
+    this.broadcastToAdmin({
+      type: 'client-connected',
+      payload: {
+        clientId,
+        agents: agentNames,
+        services: provides.services || [],
+        isExternal,
+        connectedAt: new Date()
+      }
+    });
+
+    console.log(`✅ Client connected: ${clientId} with ${agentNames.length} agents`);
   }
 
   private async buildDirectory(realmId: string, policies: string[], isExternal: boolean): Promise<Directory> {
@@ -330,17 +411,22 @@ export class WebSocketHandler {
     };
 
     let broadcastCount = 0;
-    this.routeTable.forEach((info, realmId) => {
+    this.routeTable.forEach((info, clientId) => {
       if (info.socket.readyState === WebSocket.OPEN) {
-        // Check if this realm has the capability
-        if (!capability || info.capabilities?.includes(capability)) {
+        // Check if this client has agents
+        if (info.agents && info.agents.length > 0) {
+          // Send recruitment to this client
+          info.socket.send(JSON.stringify(recruitmentMessage));
+          broadcastCount++;
+        } else if (!capability || info.capabilities?.includes(capability)) {
+          // Fallback for old-style realm registration
           info.socket.send(JSON.stringify(recruitmentMessage));
           broadcastCount++;
         }
       }
     });
 
-    console.log(`📢 Broadcast recruitment to ${broadcastCount} realms`);
+    console.log(`📢 Broadcast recruitment to ${broadcastCount} clients`);
 
     // Notify admin console
     this.broadcastToAdmin({
@@ -697,23 +783,55 @@ export class WebSocketHandler {
   }
 
   // Admin WebSocket connection handler
-  handleAdminConnection(ws: WebSocket): void {
+  async handleAdminConnection(ws: WebSocket): Promise<void> {
     console.log('Admin console connected');
 
-    // Send current state
-    ws.send(JSON.stringify({
-      type: 'initial-state',
-      payload: {
-        realms: Array.from(this.routeTable.entries()).map(([id, info]) => ({
-          id,
-          services: info.services,
-          capabilities: info.capabilities,
-          status: 'connected',
-          isExternal: info.isExternal,
-          connectedAt: info.connectedAt
-        }))
-      }
-    }));
+    try {
+      // Get all realms from database
+      const allRealms = await this.realmService.getAllRealms();
+
+      // Add connected clients info to each realm
+      const realmsWithClients = allRealms.map(realm => {
+        const connectedClients: any[] = [];
+
+        this.routeTable.forEach((info, clientId) => {
+          if (clientId === realm.realm_id || clientId.startsWith(realm.realm_id + '.')) {
+            connectedClients.push({
+              clientId,
+              services: info.services || [],
+              capabilities: info.capabilities || [],
+              agents: info.agents || [],
+              isExternal: info.isExternal,
+              connectedAt: info.connectedAt
+            });
+          }
+        });
+
+        return {
+          ...realm,
+          id: realm.realm_id,
+          connectedClients,
+          clientCount: connectedClients.length,
+          availableCapabilities: connectedClients.flatMap(c => c.capabilities),
+          availableServices: connectedClients.flatMap(c => c.services),
+          availableAgents: connectedClients.flatMap(c => c.agents)
+        };
+      });
+
+      // Send current state
+      ws.send(JSON.stringify({
+        type: 'initial-state',
+        payload: {
+          realms: realmsWithClients
+        }
+      }));
+    } catch (error) {
+      console.error('Error sending initial state to admin:', error);
+      ws.send(JSON.stringify({
+        type: 'error',
+        payload: { error: 'Failed to load initial state' }
+      }));
+    }
 
     ws.on('message', async (data) => {
       const msg: Message = JSON.parse(data.toString());

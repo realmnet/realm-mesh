@@ -63,6 +63,15 @@ const wsHandler = new WebSocketHandler(
   pool
 );
 
+// Health check endpoint
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', service: 'RealmMesh Gateway', version: '1.0.0' });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'healthy', uptime: process.uptime() });
+});
+
 // Routes
 app.use('/api/realms', createRealmsRouter(realmService, routeTable));
 app.use('/api/metrics', createMetricsRouter(routeTable, pendingRequests, eventRegistry));
@@ -76,12 +85,12 @@ externalWss.on('connection', (ws: WebSocket) =>
   wsHandler.handleConnection(ws as ExtendedWebSocket, true)
 );
 
-adminWss.on('connection', (ws: WebSocket) =>
-  wsHandler.handleAdminConnection(ws)
+adminWss.on('connection', async (ws: WebSocket) =>
+  await wsHandler.handleAdminConnection(ws)
 );
 
 // Startup
-// killPortProcesses([3001, 8080, 8443]); // Commented out temporarily
+// killPortProcesses([3001, 8080, 8443]); // Temporarily disabled - causing issues
 
 server.listen(3001, () => {
   console.log('🚀 RealmMesh Gateway started');
