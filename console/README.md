@@ -1,104 +1,30 @@
-# Realm Console
+# console-interrealm
 
-A standalone React application for managing Realm Mesh infrastructure.
+*Automatically synced with your [v0.app](https://v0.app) deployments*
 
-## Features
+[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/duncan-5425s-projects/v0-console-interrealm)
+[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/projects/dhw8ZGCMdpQ)
 
-- **Modern React Setup**: Built with Vite, React 18, and TypeScript
-- **Tailwind CSS**: For styling with dark mode support
-- **Layout System**: Sidebar navigation and header with theme toggle
-- **Mock Dashboard**: Status cards, metrics, and activity monitoring
-- **Routing**: React Router setup for multiple pages
+## Overview
 
-## Getting Started
+This repository will stay in sync with your deployed chats on [v0.app](https://v0.app).
+Any changes you make to your deployed app will be automatically pushed to this repository from [v0.app](https://v0.app).
 
-### Prerequisites
+## Deployment
 
-- Node.js (v16 or higher)
-- npm or yarn
+Your project is live at:
 
-### Installation
+**[https://vercel.com/duncan-5425s-projects/v0-console-interrealm](https://vercel.com/duncan-5425s-projects/v0-console-interrealm)**
 
-```bash
-npm install
-```
+## Build your app
 
-### Development
+Continue building your app on:
 
-```bash
-npm run dev
-```
+**[https://v0.app/chat/projects/dhw8ZGCMdpQ](https://v0.app/chat/projects/dhw8ZGCMdpQ)**
 
-The application will be available at `http://localhost:5173`
+## How It Works
 
-### Build
-
-```bash
-npm run build
-```
-
-### Preview Production Build
-
-```bash
-npm run preview
-```
-
-## Project Structure
-
-```
-console/
-├── src/
-│   ├── components/
-│   │   ├── layout/
-│   │   │   ├── header.tsx
-│   │   │   ├── layout.tsx
-│   │   │   └── sidebar.tsx
-│   │   └── ui/
-│   │       ├── button.tsx
-│   │       ├── scroll-area.tsx
-│   │       └── tabs.tsx
-│   ├── pages/
-│   │   └── dashboard/
-│   │       ├── index.tsx
-│   │       └── status-tab.tsx
-│   ├── lib/
-│   │   └── utils.ts
-│   ├── App.tsx
-│   ├── main.tsx
-│   └── index.css
-├── package.json
-├── tsconfig.json
-├── vite.config.ts
-└── tailwind.config.js
-```
-
-## Available Routes
-
-- `/` - Dashboard
-- `/realms` - Realms management
-- `/policies` - Security policies
-- `/services` - Service management
-- `/network` - Network configuration
-- `/monitoring` - System monitoring
-- `/access` - Access control
-- `/users` - User management
-- `/analytics` - Analytics dashboard
-- `/settings` - Application settings
-
-## Technologies Used
-
-- **React 18**: UI library
-- **TypeScript**: Type safety
-- **Vite**: Build tool and dev server
-- **Tailwind CSS**: Utility-first CSS framework
-- **React Router**: Client-side routing
-- **Radix UI**: Accessible UI components
-- **Lucide React**: Icon library
-
-## Scripts
-
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run preview` - Preview production build
-- `npm run lint` - Run ESLint
-- `npm run type-check` - Run TypeScript type checking
+1. Create and modify your project using [v0.app](https://v0.app)
+2. Deploy your chats from the v0 interface
+3. Changes are automatically pushed to this repository
+4. Vercel deploys the latest version from this repository

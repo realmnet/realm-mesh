@@ -1,5 +1,4 @@
 const { spawn } = require('child_process');
-const open = require('open');
 const chalk = require('chalk');
 const path = require('path');
 
@@ -13,7 +12,7 @@ function spawnProcess(name, command, args, cwd, color = 'white') {
   const proc = spawn(command, args, {
     cwd: cwd,
     stdio: 'pipe',
-    shell: true
+    shell: process.platform === 'win32' // Only use shell on Windows if needed
   });
 
   proc.stdout.on('data', (data) => {
@@ -52,7 +51,9 @@ setTimeout(() => {
 
   // 2. Open Web Console
   console.log(chalk.magenta('\n🖥️  Opening Web Console...\n'));
-  open('http://localhost:3000').catch(err => {
+  import('open').then(({ default: open }) => {
+    return open('http://localhost:3000');
+  }).catch(err => {
     console.log(chalk.gray('Could not auto-open browser. Visit http://localhost:3000'));
   });
 

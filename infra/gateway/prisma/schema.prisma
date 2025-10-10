@@ -1,0 +1,196 @@
+// RealmMesh Gateway - Prisma Schema
+// This schema unifies the previous SQL schemas into a consistent Prisma model
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// Realms Table - Hierarchical tree structure
+// ============================================
+model Realm {
+  id             String   @id @default(uuid()) @db.Uuid
+  realmId        String   @unique @map("realm_id") @db.VarChar(255)
+  parentId       String?  @map("parent_id") @db.Uuid
+  displayName    String?  @map("display_name") @db.VarChar(255)
+  realmType      String   @default("service") @map("realm_type") @db.VarChar(50)
+  description    String?  @db.Text
+  routeTo        String?  @map("route_to") @db.VarChar(500)
+  authToken      String?  @map("auth_token") @db.VarChar(500)
+  policies       Json     @default("[]") @db.JsonB
+  inheritPolicies Boolean @default(true) @map("inherit_policies")
+  metadata       Json     @default("{}") @db.JsonB
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  // Self-referential relation for hierarchy
+  parent   Realm?  @relation("RealmHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children Realm[] @relation("RealmHierarchy")
+
+  // Relations
+  services    Service[]
+  routes      Route[]
+  connections Connection[]
+  auditLogs   AuditLog[]     @relation("AuditSourceRealm")
+  targetLogs  AuditLog[]     @relation("AuditTargetRealm")
+  metrics     Metric[]
+  events      RealmEvent[]
+
+  @@index([parentId], name: "idx_realms_parent")
+  @@index([realmId], name: "idx_realms_realm_id")
+  @@map("realms")
+}
+
+// ============================================
+// Policy Definitions (reusable policies)
+// ============================================
+model Policy {
+  name        String   @id @db.VarChar(100)
+  description String?  @db.Text
+  type        String?  @db.VarChar(50) // 'auth', 'rate-limit', 'access', 'audit', etc.
+  config      Json?    @db.JsonB
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  @@map("policies")
+}
+
+// ============================================
+// Services Registry
+// ============================================
+model Service {
+  id             String    @id @default(uuid()) @db.Uuid
+  realmId        String    @map("realm_id") @db.Uuid
+  serviceName    String    @map("service_name") @db.VarChar(255)
+  capabilities   Json      @default("[]") @db.JsonB
+  capability     String?   @db.VarChar(255) // Legacy field for backward compatibility
+  connectionId   String?   @map("connection_id") @db.VarChar(255)
+  connectionType String    @default("internal") @map("connection_type") @db.VarChar(50)
+  status         String    @default("offline") @db.VarChar(50)
+  lastHeartbeat  DateTime? @map("last_heartbeat") @db.Timestamp(6)
+  lastSeen       DateTime  @default(now()) @map("last_seen") @db.Timestamp(6)
+  registeredAt   DateTime  @default(now()) @map("registered_at") @db.Timestamp(6)
+  metadata       Json      @default("{}") @db.JsonB
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  realm  Realm   @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  routes Route[]
+
+  @@unique([realmId, serviceName], name: "services_realm_id_service_name_key")
+  @@index([realmId], name: "idx_services_realm")
+  @@index([status], name: "idx_services_status")
+  @@index([capability], name: "idx_realm_services_capability")
+  @@map("services")
+}
+
+// ============================================
+// Routes Table - Fast routing lookups
+// ============================================
+model Route {
+  id              String   @id @default(uuid()) @db.Uuid
+  routePattern    String   @map("route_pattern") @db.VarChar(500)
+  targetRealmId   String   @map("target_realm_id") @db.Uuid
+  targetServiceId String?  @map("target_service_id") @db.Uuid
+  priority        Int      @default(0)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  realm   Realm    @relation(fields: [targetRealmId], references: [id], onDelete: Cascade)
+  service Service? @relation(fields: [targetServiceId], references: [id], onDelete: Cascade)
+
+  @@index([routePattern], name: "idx_routes_pattern")
+  @@index([active], name: "idx_routes_active")
+  @@map("routes")
+}
+
+// ============================================
+// Connection Sessions
+// ============================================
+model Connection {
+  id             String   @id @db.VarChar(255)
+  realmId        String   @map("realm_id") @db.Uuid
+  connectionType String   @default("websocket") @map("connection_type") @db.VarChar(50)
+  gatewayType    String   @default("internal") @map("gateway_type") @db.VarChar(50)
+  connectedAt    DateTime @default(now()) @map("connected_at") @db.Timestamp(6)
+  lastActivity   DateTime @default(now()) @map("last_activity") @db.Timestamp(6)
+  metadata       Json     @default("{}") @db.JsonB
+
+  realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
+
+  @@index([realmId], name: "idx_connections_realm")
+  @@map("connections")
+}
+
+// ============================================
+// Realm Events (event topics and subscriptions)
+// ============================================
+model RealmEvent {
+  realmId    String   @map("realm_id") @db.Uuid
+  eventTopic String   @map("event_topic") @db.VarChar(255)
+  eventType  String   @map("event_type") @db.VarChar(50) // 'publisher' or 'subscriber'
+  metadata   Json     @default("{}") @db.JsonB
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
+
+  @@id([realmId, eventTopic, eventType])
+  @@index([realmId], name: "idx_realm_events_realm")
+  @@index([eventTopic], name: "idx_realm_events_topic")
+  @@map("realm_events")
+}
+
+// ============================================
+// Audit Log - Inter-realm communication tracking
+// ============================================
+model AuditLog {
+  id             String    @id @default(uuid()) @db.Uuid
+  timestamp      DateTime  @default(now()) @db.Timestamp(6)
+  sourceRealmId  String?   @map("source_realm_id") @db.Uuid
+  targetRealmId  String?   @map("target_realm_id") @db.Uuid
+  fromRealm      String?   @map("from_realm") @db.VarChar(255)
+  toRealm        String?   @map("to_realm") @db.VarChar(255)
+  messageType    String?   @map("message_type") @db.VarChar(100)
+  operation      String?   @db.VarChar(100)
+  capability     String?   @db.VarChar(255)
+  service        String?   @db.VarChar(255)
+  payloadSize    Int?      @map("payload_size")
+  status         String?   @db.VarChar(50)
+  success        Boolean?
+  latencyMs      Int?      @map("latency_ms")
+  errorMessage   String?   @map("error_message") @db.Text
+  metadata       Json      @default("{}") @db.JsonB
+
+  sourceRealm Realm? @relation("AuditSourceRealm", fields: [sourceRealmId], references: [id], onDelete: SetNull)
+  targetRealm Realm? @relation("AuditTargetRealm", fields: [targetRealmId], references: [id], onDelete: SetNull)
+
+  @@index([timestamp(sort: Desc)], name: "idx_audit_timestamp")
+  @@index([fromRealm], name: "idx_audit_from_realm")
+  @@index([toRealm], name: "idx_audit_to_realm")
+  @@index([sourceRealmId], name: "idx_audit_source_realm")
+  @@index([targetRealmId], name: "idx_audit_target_realm")
+  @@map("audit_log")
+}
+
+// ============================================
+// Metrics Table
+// ============================================
+model Metric {
+  id         String   @id @default(uuid()) @db.Uuid
+  metricType String   @map("metric_type") @db.VarChar(100)
+  realmId    String?  @map("realm_id") @db.Uuid
+  value      Decimal? @db.Decimal
+  timestamp  DateTime @default(now()) @db.Timestamp(6)
+  metadata   Json     @default("{}") @db.JsonB
+
+  realm Realm? @relation(fields: [realmId], references: [id], onDelete: Cascade)
+
+  @@index([timestamp], name: "idx_metrics_timestamp")
+  @@index([metricType, realmId], name: "idx_metrics_type_realm")
+  @@map("metrics")
+}

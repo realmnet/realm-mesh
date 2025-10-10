@@ -1,0 +1,157 @@
+capability:
+  name: finance.invoice-management
+  version: 1.0.0
+  description: Invoice generation and management service
+
+metadata:
+  author: InterRealm Team
+  tags:
+    - finance
+    - invoicing
+    - billing
+  license: MIT
+
+interface:
+  operations:
+    - name: generate_invoice
+      description: Generate a new invoice for a customer
+      input:
+        parameters:
+          - name: customer_id
+            type: string
+            required: true
+            description: The customer's unique identifier
+          - name: items
+            type: array
+            required: true
+            description: List of items to include in the invoice
+          - name: process_payment
+            type: boolean
+            required: false
+            default: false
+            description: Whether to process payment immediately
+          - name: due_date
+            type: string
+            required: false
+            description: ISO date when payment is due
+      output:
+        type: object
+        schema:
+          type: object
+          properties:
+            invoice_id:
+              type: string
+            customer_id:
+              type: string
+            total:
+              type: number
+            status:
+              type: string
+            created_at:
+              type: string
+            payment_id:
+              type: string
+
+    - name: get_invoice
+      description: Retrieve an invoice by ID
+      input:
+        parameters:
+          - name: invoice_id
+            type: string
+            required: true
+            description: The invoice ID to retrieve
+      output:
+        type: object
+        schema:
+          type: object
+          properties:
+            invoice_id:
+              type: string
+            customer_id:
+              type: string
+            items:
+              type: array
+            total:
+              type: number
+            status:
+              type: string
+
+  events:
+    - name: invoice_generated
+      description: Triggered when a new invoice is generated
+      payload:
+        type: object
+        schema:
+          type: object
+          properties:
+            invoice_id:
+              type: string
+            customer_id:
+              type: string
+            total:
+              type: number
+            generated_at:
+              type: string
+
+    - name: payment_processed
+      description: Triggered when payment is processed
+      payload:
+        type: object
+        schema:
+          type: object
+          properties:
+            invoice_id:
+              type: string
+            payment_id:
+              type: string
+            amount:
+              type: number
+            processed_at:
+              type: string
+
+  errors:
+    - code: INV_001
+      name: customer_not_found
+      description: The specified customer ID was not found
+    - code: INV_002
+      name: invalid_items
+      description: The items list is invalid or empty
+    - code: INV_003
+      name: invoice_not_found
+      description: The specified invoice ID was not found
+    - code: INV_004
+      name: payment_failed
+      description: Payment processing failed
+
+configuration:
+  parameters:
+    - name: payment_gateway_url
+      type: string
+      required: true
+      description: URL of the payment processing gateway
+    - name: default_currency
+      type: string
+      required: false
+      default: USD
+      description: Default currency for invoices
+    - name: auto_send_email
+      type: boolean
+      required: false
+      default: true
+      description: Whether to automatically send invoice emails
+    - name: tax_rate
+      type: number
+      required: false
+      default: 0.08
+      description: Default tax rate to apply
+
+authorization:
+  roles:
+    - invoice_manager
+    - billing_admin
+    - customer_service
+  permissions:
+    - create_invoice
+    - read_invoice
+    - process_payment
+    - send_notification

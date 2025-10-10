@@ -1,0 +1,22 @@
+{
+  "name": "invoice-service-example",
+  "version": "1.0.0",
+  "description": "Example InterRealm invoice service",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node-dev --respawn src/main.ts",
+    "start": "node dist/main.js",
+    "generate": "node ../../cli/generate.ts capabilities/invoice-management.yaml -o src/generated/invoice-types.ts"
+  },
+  "dependencies": {
+    "@interrealm/sdk": "file:../../",
+    "reflect-metadata": "^0.1.13",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.9.0",
+    "typescript": "^5.2.2",
+    "ts-node-dev": "^2.0.0"
+  }
+}
