@@ -1,14 +1,18 @@
 {
   "name": "realm-mesh-mvp",
   "version": "1.0.0",
-  "description": "RealmMesh MVP Demo - See agents coordinate in real-time",
+  "description": "RealmMesh MVP Demo - Two agents coordinating through loops",
   "scripts": {
     "demo": "node demo.js",
-    "setup": "npm install && cd agents/pricing-agent && npm install && cd ../inventory-agent && npm install && cd ../.."
+    "pricing-agent": "cd agents/pricing-agent && npm start",
+    "inventory-agent": "cd agents/inventory-agent && npm start"
   },
   "dependencies": {
-    "open": "^9.1.0",
-    "chalk": "^4.1.2",
-    "ws": "^8.14.2"
+    "ws": "^8.14.2",
+    "open": "^9.1.0"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

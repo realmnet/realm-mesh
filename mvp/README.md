@@ -1,106 +1,188 @@
 # RealmMesh MVP Demo
 
-See agents coordinate in real-time!
-
-## Quick Start
-
-```bash
-# Install dependencies
-npm run setup
-
-# Run the demo
-npm run demo
-```
-
-This will:
-1. Start the Gateway (WebSocket server)
-2. Open the Web Console in your browser
-3. Launch two agents (Pricing & Inventory)
-4. Run a demo scenario showing agent coordination
-
-## What You'll See
-
-- **Web Console**: Real-time visualization of agent activity at http://localhost:3000
-- **Terminal**: Color-coded logs from each component
-- **Demo Scenario**: Agents bidding and coordinating on a price check
+This MVP demonstrates two agents coordinating through the RealmMesh gateway using the Loop coordination pattern.
 
 ## Architecture
 
 ```
-Gateway (WebSocket Server - :3001, :8080, :8443)
-    ↕
-├─ Console (React UI - :3000)
-├─ PricingAgent (calculates prices)
-├─ InventoryAgent (checks stock)
-└─ DemoScenario (initiates loops)
+┌─────────────┐
+│   Gateway   │  (Port 8080 - WebSocket)
+└──────┬──────┘
+       │
+   ┌───┼───┐
+   │   │   │
+┌──▼─┐ │ ┌─▼──┐
+│ P  │ │ │ I  │  P = PricingAgent
+│    │ │ │    │  I = InventoryAgent
+└────┘ │ └────┘
+       │
+  ┌────▼────┐
+  │ Console │  (Port 3000 - Web UI)
+  └─────────┘
 ```
 
-## How It Works
+## What It Does
 
-1. **Gateway starts** - WebSocket server ready for connections
-2. **Console loads** - Shows empty realm list initially
-3. **Agents connect** - Register with capabilities (pricing, inventory)
-4. **Console updates** - Shows connected agents in real-time
-5. **Scenario runs** - Initiates a "PriceCheck" loop
-6. **Loop coordination**:
-   - Gateway broadcasts recruitment to agents
-   - Agents bid/accept participation
-   - Gateway coordinates execution
-   - Results are aggregated and returned
+1. **Gateway** starts and listens for WebSocket connections
+2. **Two Agents** connect as clients, each providing different capabilities
+3. **Scenario script** initiates a "PriceCheck" loop
+4. **Agents** are recruited, execute their logic, and return results
+5. **Gateway** aggregates results and returns the final answer
+6. **Web Console** shows real-time activity
 
-## Loop Execution Flow
-
-```
-Scenario → Gateway → [Pricing Agent, Inventory Agent]
-    ↓         ↓              ↓              ↓
-  Loop     Broadcast    Calculate       Check Stock
- Initiate  Recruitment    Price          Available
-    ↓         ↓              ↓              ↓
- Gateway  ← Recruitment ← Accept        ← Accept
-    ↓      Responses      Participation   Participation
-    ↓         ↓              ↓              ↓
- Execute → Coordinate → Calculate      → Return Stock
-  Phase     Execution    Final Price     Status
-    ↓         ↓              ↓              ↓
- Aggregate ← Results   ← Price: $75    ← In Stock: 50
-  Results      ↓
-    ↓          ↓
- Complete → Scenario
-   Loop
-```
-
-## Manual Testing
-
-Start individual components:
+## Quick Start
 
 ```bash
-# Terminal 1 - Gateway
-cd ../infra/gateway && npm run dev
+# From the mvp directory
+npm install
+cd agents/pricing-agent && npm install && cd ../..
+cd agents/inventory-agent && npm install && cd ../..
 
-# Terminal 2 - Console
-cd ../console && npm run dev
+# Run the complete demo
+npm run demo
+```
 
-# Terminal 3 - Pricing Agent
-cd agents/pricing-agent && npm start
+This single command will:
+- Start the gateway
+- Start the web console
+- Start both agents
+- Run the demo scenario
+- Show real-time coordination
 
-# Terminal 4 - Inventory Agent
-cd agents/inventory-agent && npm start
+## Manual Start (for debugging)
 
-# Terminal 5 - Run Scenario
+Terminal 1 - Gateway:
+```bash
+cd ../infra/gateway
+npm run dev
+```
+
+Terminal 2 - Console:
+```bash
+cd ../apps/console
+npm run dev
+```
+
+Terminal 3 - Pricing Agent:
+```bash
+cd agents/pricing-agent
+npm start
+```
+
+Terminal 4 - Inventory Agent:
+```bash
+cd agents/inventory-agent
+npm start
+```
+
+Terminal 5 - Scenario:
+```bash
 node scenarios/price-check-scenario.js
 ```
 
-## Press Ctrl+C to stop the demo
+## What You'll See
+
+### Pricing Agent Output:
+```
+💰 Starting PricingAgent...
+✅ Connected to gateway
+🤝 Handshake complete!
+
+🔔 Recruitment for loop: PriceCheck
+   ✅ ACCEPT
+
+⚡ Executing loop: PriceCheck
+   💰 Calculated price: $87.43
+
+✅ Loop complete!
+```
+
+### Inventory Agent Output:
+```
+📦 InventoryAgent connecting...
+✅ InventoryAgent connected!
+
+🔔 Recruited for loop: PriceCheck
+   ✓ We have stock for PROD-123
+
+⚡ Executing: PriceCheck
+   ✓ In stock: 50 units available
+
+✅ Loop complete!
+```
+
+### Scenario Output:
+```
+🎬 Starting Price Check Scenario...
+✅ Connected to gateway
+🚀 Initiating PriceCheck loop...
+
+📋 Recruitment complete: 2 participants
+
+✅ Loop Complete!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{
+  "loopId": "demo-loop-1234567890",
+  "participantResults": [
+    {
+      "agent": "pricing-client-1",
+      "result": { "price": 87.43, "confidence": 0.95 }
+    },
+    {
+      "agent": "inventory-agent-1",
+      "result": { "available": 50, "canFulfill": true }
+    }
+  ],
+  "summary": {
+    "minPrice": 87.43,
+    "maxPrice": 87.43,
+    "avgPrice": 87.43
+  }
+}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Duration: 1247ms
+🎉 Demo complete!
+```
+
+## Key Concepts Demonstrated
+
+1. **Client/Agent Model**: Applications (clients) connect to the gateway and provide agents
+2. **Loop Coordination**: Gateway coordinates multi-agent workflows
+3. **Recruitment Phase**: Agents decide whether to participate
+4. **Execution Phase**: Participating agents execute in parallel
+5. **Aggregation**: Gateway combines results from all participants
+6. **Real-time Updates**: Web console shows live activity
 
 ## Troubleshooting
 
-- **"ECONNREFUSED"**: Make sure the gateway is running first
-- **No agents in console**: Check that agents successfully connected to gateway
-- **Loop fails**: Ensure at least one agent accepts the recruitment
+**Port already in use:**
+```bash
+# Kill process on port 8080
+lsof -ti:8080 | xargs kill -9
+
+# Kill process on port 3000
+lsof -ti:3000 | xargs kill -9
+```
+
+**Agents not connecting:**
+- Make sure gateway is running first
+- Check gateway logs for errors
+- Verify WebSocket URL is correct (ws://localhost:8080)
+
+**No output from scenario:**
+- Wait 3-5 seconds for agents to connect
+- Check that both agents show "Handshake complete"
+- Increase timeout in demo.js if needed
 
 ## Next Steps
 
-- Add more agent types (notification, payment, etc.)
-- Implement different loop types (voting, consensus)
-- Add real SDK integration
-- Create more complex scenarios
+- Add more agents with different capabilities
+- Create complex loop stacks (multi-step workflows)
+- Add authentication and authorization
+- Build service-to-service calls
+- Implement event-driven messaging
+
+## Architecture Details
+
+See the main project README for full architecture documentation.

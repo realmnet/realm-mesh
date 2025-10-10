@@ -1,170 +1,245 @@
 const WebSocket = require('ws');
-const chalk = require('chalk');
 
-class InventoryAgent {
-  constructor() {
-    this.agentId = 'inventory-agent-1';
-    this.ws = null;
-    this.inventory = {
-      'PROD-123': 50,
-      'PROD-456': 30,
-      'PROD-789': 100
+const CLIENT_ID = 'inventory-client-1';
+const GATEWAY_URL = process.env.GATEWAY_URL || 'ws://localhost:8080';
+const AGENT_NAME = 'InventoryAgent';
+
+console.log(`🚀 Starting ${AGENT_NAME}...`);
+console.log(`📡 Connecting to gateway: ${GATEWAY_URL}`);
+
+const ws = new WebSocket(GATEWAY_URL);
+let inventory = {
+  'PROD-123': { stock: 50, location: 'warehouse-1' },
+  'PROD-456': { stock: 25, location: 'warehouse-2' },
+  'PROD-789': { stock: 100, location: 'warehouse-1' }
+};
+
+ws.on('open', () => {
+  console.log(`✅ Connected to gateway`);
+
+  // Send client handshake
+  ws.send(JSON.stringify({
+    type: 'client-handshake',
+    payload: {
+      clientId: CLIENT_ID,
+      authToken: 'demo-token-inventory',
+      provides: {
+        agents: [
+          {
+            name: AGENT_NAME,
+            participatesIn: ['PriceCheck', 'InventoryCheck'],
+            skills: ['stock-management', 'fulfillment']
+          }
+        ],
+        services: ['GetInventory', 'UpdateStock'],
+        eventHandlers: ['order.created']
+      },
+      consumes: {
+        services: ['CalculatePrice'],
+        events: ['price.updated']
+      }
+    }
+  }));
+});
+
+ws.on('message', (data) => {
+  const msg = JSON.parse(data.toString());
+
+  switch (msg.type) {
+    case 'client-handshake-ack':
+      console.log(`✅ Handshake complete! Client ID: ${msg.payload.clientId}`);
+      console.log(`📋 Available capabilities:`, msg.payload.availableCapabilities);
+
+      // Subscribe to events
+      ws.send(JSON.stringify({
+        type: 'event-subscribe',
+        payload: { topic: 'order.created' }
+      }));
+      break;
+
+    case 'subscription-confirmed':
+      console.log(`📫 Subscribed to topic: ${msg.payload.topic}`);
+      break;
+
+    case 'loop-recruitment':
+      handleRecruitment(msg.payload);
+      break;
+
+    case 'loop-execute':
+      handleExecution(msg.payload);
+      break;
+
+    case 'loop-complete':
+      handleLoopComplete(msg.payload);
+      break;
+
+    case 'service-call':
+      handleServiceCall(msg.payload);
+      break;
+
+    case 'event':
+      handleEvent(msg.payload);
+      break;
+
+    default:
+      console.log(`📨 Received: ${msg.type}`);
+  }
+});
+
+// ============================================
+// Loop Participation
+// ============================================
+
+function handleRecruitment(payload) {
+  const { loopId, loopName, recruitmentMessage } = payload;
+
+  console.log(`\n🔔 Recruitment for loop: ${loopName} (${loopId})`);
+  console.log(`   Input:`, recruitmentMessage);
+
+  const shouldAccept = true;
+  console.log(`   Decision: ${shouldAccept ? '✅ ACCEPT' : '❌ DECLINE'}`);
+
+  ws.send(JSON.stringify({
+    type: 'loop-recruitment-response',
+    payload: {
+      loopId,
+      agentId: CLIENT_ID,
+      accepts: shouldAccept,
+      bid: {
+        confidence: 0.90,
+        estimatedTime: 150
+      }
+    }
+  }));
+}
+
+function handleExecution(payload) {
+  const { loopId, loopName, input } = payload;
+
+  console.log(`\n⚡ Executing loop: ${loopName} (${loopId})`);
+  console.log(`   Input:`, input);
+
+  // Simulate inventory check
+  const productId = input.productId || 'PROD-123';
+  const stock = inventory[productId] || { stock: 0, location: 'unknown' };
+
+  const result = {
+    productId,
+    inStock: stock.stock > 0,
+    quantity: stock.stock,
+    location: stock.location,
+    agent: AGENT_NAME
+  };
+
+  console.log(`   📦 Inventory check result:`, result);
+
+  ws.send(JSON.stringify({
+    type: 'loop-execute-response',
+    payload: {
+      loopId,
+      agentId: CLIENT_ID,
+      result
+    }
+  }));
+}
+
+function handleLoopComplete(payload) {
+  const { loopId, result } = payload;
+
+  console.log(`\n✅ Loop complete: ${loopId}`);
+  console.log(`   Final result:`, result);
+}
+
+// ============================================
+// Service Calls (RPC)
+// ============================================
+
+function handleServiceCall(payload) {
+  const { requestId, service, input, callerRealm } = payload;
+
+  console.log(`\n📞 Service call: ${service} from ${callerRealm}`);
+  console.log(`   Request ID: ${requestId}`);
+  console.log(`   Input:`, input);
+
+  let result;
+
+  if (service.includes('GetInventory')) {
+    const productId = input.productId || 'PROD-123';
+    result = {
+      productId,
+      ...inventory[productId],
+      timestamp: new Date().toISOString()
     };
-  }
+  } else if (service.includes('UpdateStock')) {
+    const { productId, quantity } = input;
+    if (inventory[productId]) {
+      inventory[productId].stock = quantity;
+      result = { success: true, productId, newStock: quantity };
 
-  async connect() {
-    return new Promise((resolve, reject) => {
-      console.log(chalk.blue('📦 InventoryAgent connecting to gateway...'));
-
-      this.ws = new WebSocket('ws://localhost:8080');
-
-      this.ws.on('open', () => {
-        console.log(chalk.blue('✅ InventoryAgent connected!'));
-        this.sendHandshake();
-        resolve();
-      });
-
-      this.ws.on('message', (data) => {
-        this.handleMessage(JSON.parse(data.toString()));
-      });
-
-      this.ws.on('error', (error) => {
-        console.error(chalk.red('❌ InventoryAgent error:'), error.message);
-        reject(error);
-      });
-
-      this.ws.on('close', () => {
-        console.log(chalk.yellow('👋 InventoryAgent disconnected'));
-      });
-    });
-  }
-
-  sendHandshake() {
-    this.send({
-      type: 'register-realm',
-      payload: {
-        realmId: this.agentId,
-        services: ['stock-check', 'availability'],
-        capabilities: ['inventory'],
-        authToken: 'demo-token'
-      }
-    });
-  }
-
-  handleMessage(message) {
-    switch (message.type) {
-      case 'discovery-response':
-        console.log(chalk.blue('🤝 Handshake acknowledged'));
-        break;
-
-      case 'loop-recruitment':
-        this.handleRecruitment(message.payload);
-        break;
-
-      case 'loop-execute':
-        this.handleExecution(message.payload);
-        break;
-
-      case 'loop-complete':
-        this.handleComplete(message.payload);
-        break;
-    }
-  }
-
-  handleRecruitment(payload) {
-    const { loopId, loopName, recruitmentMessage } = payload;
-
-    console.log(chalk.cyan(`\n🔔 Recruited for loop: ${loopName}`));
-    console.log(chalk.gray(`   Loop ID: ${loopId}`));
-
-    // Check if we have this product
-    const hasProduct = this.inventory[recruitmentMessage.productId] !== undefined;
-
-    if (hasProduct) {
-      console.log(chalk.green(`   ✓ We have stock for ${recruitmentMessage.productId}`));
+      // Publish inventory updated event
+      publishEvent('inventory.updated', { productId, newStock: quantity });
     } else {
-      console.log(chalk.yellow(`   ✗ No stock info for ${recruitmentMessage.productId}`));
+      result = { success: false, error: 'Product not found' };
     }
-
-    this.send({
-      type: 'loop-recruitment-response',
-      payload: {
-        loopId,
-        agentId: this.agentId,
-        accepts: hasProduct,
-        bid: {
-          confidence: hasProduct ? 1.0 : 0,
-          estimatedTime: 50
-        }
-      }
-    });
+  } else {
+    result = { error: 'Unknown service' };
   }
 
-  async handleExecution(payload) {
-    const { loopId, loopName, input } = payload;
+  console.log(`   📦 Result:`, result);
 
-    console.log(chalk.magenta(`\n⚡ Executing: ${loopName}`));
-    console.log(chalk.gray(`   Checking stock for: ${input.productId}`));
-
-    // Simulate stock check
-    await this.sleep(800);
-
-    const available = this.inventory[input.productId] || 0;
-    const canFulfill = available >= input.quantity;
-
-    const result = {
-      available,
-      requested: input.quantity,
-      canFulfill,
-      status: canFulfill ? 'in-stock' : 'insufficient',
-      source: 'InventoryAgent'
-    };
-
-    if (canFulfill) {
-      console.log(chalk.green(`   ✓ In stock: ${available} units available`));
-    } else {
-      console.log(chalk.yellow(`   ⚠️  Low stock: only ${available} available`));
+  ws.send(JSON.stringify({
+    type: 'service-response',
+    payload: {
+      requestId,
+      result
     }
+  }));
+}
 
-    this.send({
-      type: 'loop-execute-response',
-      payload: {
-        loopId,
-        agentId: this.agentId,
-        result
-      }
-    });
-  }
+// ============================================
+// Event Handling (Pub/Sub)
+// ============================================
 
-  handleComplete(payload) {
-    const { loopId, result } = payload;
-    console.log(chalk.blue(`\n✅ Loop complete!`));
-    console.log(chalk.gray(`   Final result: ${JSON.stringify(result, null, 2)}`));
-  }
+function handleEvent(payload) {
+  const { topic, data, publisher, timestamp } = payload;
 
-  send(message) {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(message));
+  console.log(`\n📨 Event received on topic: ${topic}`);
+  console.log(`   Publisher: ${publisher}`);
+  console.log(`   Data:`, data);
+  console.log(`   Timestamp: ${timestamp}`);
+
+  if (topic === 'order.created') {
+    console.log(`   💡 New order! Checking inventory...`);
+    const productId = data.productId;
+    if (inventory[productId]) {
+      console.log(`   📦 Current stock for ${productId}:`, inventory[productId].stock);
     }
-  }
-
-  sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }
 
-// Start the agent
-const agent = new InventoryAgent();
-agent.connect().catch(err => {
-  console.error('Failed to start agent:', err);
-  process.exit(1);
-});
+function publishEvent(topic, data) {
+  console.log(`\n📤 Publishing event to topic: ${topic}`);
+  ws.send(JSON.stringify({
+    type: 'event-publish',
+    payload: {
+      topic,
+      payload: data
+    }
+  }));
+}
 
-// Graceful shutdown
-process.on('SIGINT', () => {
-  console.log(chalk.yellow('\n👋 Shutting down InventoryAgent...'));
-  if (agent.ws) {
-    agent.ws.close();
-  }
+ws.on('close', () => {
+  console.log('❌ Disconnected from gateway');
   process.exit(0);
 });
+
+ws.on('error', (error) => {
+  console.error('❌ WebSocket error:', error.message);
+});
+
+process.on('SIGINT', () => {
+  console.log('\n👋 Shutting down...');
+  ws.close();
+});
+
+console.log('⏳ Waiting for connection...');
