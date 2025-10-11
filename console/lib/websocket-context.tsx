@@ -27,9 +27,33 @@ interface LoopExecution {
   progress: number
 }
 
+interface ServiceCall {
+  id: string
+  requestId: string
+  service: string
+  capability: string
+  caller: string
+  target: string
+  status: 'pending' | 'completed' | 'failed'
+  timestamp: string
+  result?: any
+}
+
+interface EventActivity {
+  id: string
+  topic: string
+  type: 'published' | 'subscribed'
+  timestamp: string
+  publisher?: string
+  subscriber?: string
+  subscriberCount?: number
+}
+
 interface WebSocketContextType {
   realms: Realm[]
   loops: LoopExecution[]
+  serviceCalls: ServiceCall[]
+  events: EventActivity[]
   loading: boolean
   error: string | null
   refreshRealms: () => Promise<void>
@@ -53,6 +77,8 @@ interface WebSocketProviderProps {
 export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const [realms, setRealms] = useState<Realm[]>([])
   const [loops, setLoops] = useState<LoopExecution[]>([])
+  const [serviceCalls, setServiceCalls] = useState<ServiceCall[]>([])
+  const [events, setEvents] = useState<EventActivity[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isConnected, setIsConnected] = useState(false)
@@ -205,6 +231,85 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 }, 10000)
               }
               break
+
+            case 'service-call':
+              console.log(`🔧 [${connectionIdRef.current}] Service call:`, message.payload)
+              if (mountedRef.current) {
+                const newCall: ServiceCall = {
+                  id: message.payload.requestId,
+                  requestId: message.payload.requestId,
+                  service: message.payload.service,
+                  capability: message.payload.capability,
+                  caller: message.payload.caller,
+                  target: message.payload.target,
+                  status: 'pending',
+                  timestamp: message.payload.timestamp
+                }
+                setServiceCalls(prev => [newCall, ...prev].slice(0, 50)) // Keep last 50
+              }
+              break
+
+            case 'service-response':
+              console.log(`🔧 [${connectionIdRef.current}] Service response:`, message.payload)
+              if (mountedRef.current) {
+                setServiceCalls(prev => prev.map(call =>
+                  call.requestId === message.payload.requestId
+                    ? { ...call, status: message.payload.hasError ? 'failed' : 'completed', result: message.payload.result }
+                    : call
+                ))
+
+                // Remove after 5 seconds
+                setTimeout(() => {
+                  if (mountedRef.current) {
+                    setServiceCalls(prev => prev.filter(call => call.requestId !== message.payload.requestId))
+                  }
+                }, 5000)
+              }
+              break
+
+            case 'event-published':
+              console.log(`🔧 [${connectionIdRef.current}] Event published:`, message.payload)
+              if (mountedRef.current) {
+                const newEvent: EventActivity = {
+                  id: `${message.payload.topic}-${Date.now()}`,
+                  topic: message.payload.topic,
+                  type: 'published',
+                  publisher: message.payload.publisher,
+                  subscriberCount: message.payload.subscriberCount,
+                  timestamp: new Date().toISOString()
+                }
+                setEvents(prev => [newEvent, ...prev].slice(0, 100)) // Keep last 100
+
+                // Remove after 5 seconds
+                setTimeout(() => {
+                  if (mountedRef.current) {
+                    setEvents(prev => prev.filter(e => e.id !== newEvent.id))
+                  }
+                }, 5000)
+              }
+              break
+
+            case 'event-subscribed':
+              console.log(`🔧 [${connectionIdRef.current}] Event subscribed:`, message.payload)
+              if (mountedRef.current) {
+                const newEvent: EventActivity = {
+                  id: `${message.payload.topic}-sub-${Date.now()}`,
+                  topic: message.payload.topic,
+                  type: 'subscribed',
+                  subscriber: message.payload.subscriber,
+                  subscriberCount: message.payload.totalSubscribers,
+                  timestamp: new Date().toISOString()
+                }
+                setEvents(prev => [newEvent, ...prev].slice(0, 100))
+
+                // Remove after 3 seconds
+                setTimeout(() => {
+                  if (mountedRef.current) {
+                    setEvents(prev => prev.filter(e => e.id !== newEvent.id))
+                  }
+                }, 3000)
+              }
+              break
           }
         } catch (err) {
           console.error('Failed to parse WebSocket message:', err)
@@ -292,6 +397,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const value: WebSocketContextType = {
     realms,
     loops,
+    serviceCalls,
+    events,
     loading,
     error,
     refreshRealms,

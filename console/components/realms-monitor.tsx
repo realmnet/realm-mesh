@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils"
 import { gatewayAPI, transformGatewayRealm } from "@/lib/api"
 import { useWebSocket } from "@/lib/websocket-context"
 import { CreateRealmModal } from "./create-realm-modal"
+import { ActivityFeed } from "./activity-feed"
 
 interface Realm {
   id: string
@@ -286,42 +287,8 @@ export function RealmsMonitor() {
               </CardContent>
             </Card>
 
-            {/* Active Loops */}
-            {loops.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Active Loop Executions</CardTitle>
-                  <CardDescription>
-                    Multi-agent coordination loops currently in progress
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {loops.map(loop => (
-                      <div key={loop.id} className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <Badge className={getLoopStatusColor(loop.status)}>
-                              {loop.status}
-                            </Badge>
-                            <div>
-                              <p className="font-medium">{loop.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                Type: {loop.type} | Initiator: {loop.initiator}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            {loop.participants.length} participants
-                          </div>
-                        </div>
-                        <Progress value={loop.progress} className="h-2" />
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            {/* Real-Time Activity Feed */}
+            <ActivityFeed />
           </div>
         )}
       </div>

@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "dev": "tsx watch src/index.ts",
     "migrate": "ts-node src/db/migrate.ts",
     "db:migrate": "node run-migration.js",
     "prisma:generate": "prisma generate",
@@ -34,7 +34,7 @@
     "nodemon": "^3.0.1",
     "prisma": "^6.17.0",
     "ts-node": "^10.9.0",
-    "ts-node-dev": "^2.0.0",
+    "tsx": "^4.20.6",
     "typescript": "^5.0.0"
   }
 }

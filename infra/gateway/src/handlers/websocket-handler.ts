@@ -351,6 +351,19 @@ export class WebSocketHandler {
       timestamp: Date.now()
     });
 
+    // Notify admin console about service call
+    this.broadcastToAdmin({
+      type: 'service-call',
+      payload: {
+        requestId,
+        service,
+        capability,
+        caller: callerRealmId,
+        target: targetRealm,
+        timestamp: new Date().toISOString()
+      }
+    });
+
     // Forward the request
     targetInfo.socket.send(JSON.stringify({
       type: 'service-call',
@@ -365,12 +378,23 @@ export class WebSocketHandler {
   }
 
   private handleServiceResponse(msg: Message): void {
-    const { requestId } = msg.payload as ServiceResponsePayload;
+    const { requestId, output, error } = msg.payload as ServiceResponsePayload;
     const pendingRequest = this.pendingRequests.get(requestId) as PendingRequest;
 
     if (pendingRequest) {
       pendingRequest.fromSocket.send(JSON.stringify(msg));
       this.pendingRequests.delete(requestId);
+
+      // Notify admin console about service response
+      this.broadcastToAdmin({
+        type: 'service-response',
+        payload: {
+          requestId,
+          hasError: !!error,
+          result: output,
+          timestamp: new Date().toISOString()
+        }
+      });
     }
   }
 
