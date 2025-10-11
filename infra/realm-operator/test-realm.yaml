@@ -1,8 +1,0 @@
-apiVersion: interrealm.io/v1
-kind: Realm
-metadata:
-  name: test-realm
-  namespace: default
-spec:
-  image: nginx:latest
-  replicas: 2

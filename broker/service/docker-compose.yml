@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  broker-postgres:
+    image: postgres:14-alpine
+    container_name: broker-postgres
+    environment:
+      POSTGRES_DB: broker_db
+      POSTGRES_USER: broker_user
+      POSTGRES_PASSWORD: broker_pass
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+    ports:
+      - "5433:5432"  # Using 5433 to avoid conflict with control-plane DB
+    volumes:
+      - broker-postgres-data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - broker-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U broker_user -d broker_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  broker-pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: broker-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5051:80"  # Using 5051 to avoid conflict with control-plane pgadmin
+    networks:
+      - broker-network
+    depends_on:
+      - broker-postgres
+    volumes:
+      - broker-pgadmin-data:/var/lib/pgadmin
+
+volumes:
+  broker-postgres-data:
+    driver: local
+  broker-pgadmin-data:
+    driver: local
+
+networks:
+  broker-network:
+    driver: bridge

@@ -5,11 +5,13 @@
   "scripts": {
     "demo": "node demo.js",
     "pricing-agent": "cd agents/pricing-agent && npm start",
-    "inventory-agent": "cd agents/inventory-agent && npm start"
+    "inventory-agent": "cd agents/inventory-agent && npm start",
+    "seed": "node seed-realms.js"
   },
   "dependencies": {
     "ws": "^8.14.2",
-    "open": "^9.1.0"
+    "open": "^9.1.0",
+    "dotenv": "^16.3.1"
   },
   "devDependencies": {},
   "engines": {

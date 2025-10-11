@@ -8,7 +8,7 @@
         mvp-install mvp-demo mvp-fast mvp-continuous mvp-price-check mvp-stress mvp-multi-realm mvp-all-patterns \
         kill-all kill-broker kill-console kill-agents \
         env-setup env-broker env-console env-mvp \
-        dev mvp mvp-start mvp-stop
+        dev mvp
 
 # ==============================================
 # Configuration
@@ -110,8 +110,7 @@ help:
 	@echo ""
 	@echo "� QUICK START (One Command):"
 	@echo "  make dev                - Setup everything and start dev environment"
-	@echo "  make mvp-start          - Start full MVP demo (broker + agents + console)"
-	@echo "  make mvp-stop           - Stop all MVP services"
+	@echo "  make mvp                - Setup and run full MVP demo"
 	@echo ""
 	@echo "=� Environment Setup:"
 	@echo "  make env-setup          - Generate all .env files from config"
@@ -169,10 +168,6 @@ env-mvp:
 	@echo "GATEWAY_URL=$(GATEWAY_URL)" >> $(MVP_DIR)/.env
 	@echo "AUTH_TOKEN=$(AUTH_TOKEN)" >> $(MVP_DIR)/.env
 	@echo "" >> $(MVP_DIR)/.env
-	@echo "# Admin API (for seeding and management)" >> $(MVP_DIR)/.env
-	@echo "ADMIN_API=http://localhost:$(ADMIN_PORT)" >> $(MVP_DIR)/.env
-	@echo "ADMIN_API_KEY=$(ADMIN_API_KEY)" >> $(MVP_DIR)/.env
-	@echo "" >> $(MVP_DIR)/.env
 	@echo "# Web Console" >> $(MVP_DIR)/.env
 	@echo "CONSOLE_PORT=$(CONSOLE_PORT)" >> $(MVP_DIR)/.env
 	@echo "" >> $(MVP_DIR)/.env
@@ -211,80 +206,34 @@ dev: env-setup install-all broker-db-up broker-db-setup
 	@echo "  Terminal 1: make broker-dev    - Start broker service"
 	@echo "  Terminal 2: make console-dev   - Start web console"
 	@echo ""
-	@echo "Or run the MVP demo with: make mvp-start"
+	@echo "Or run the MVP demo with: make mvp"
 
-# MVP Seed - Create necessary realms for MVP demo
-mvp-seed:
-	@echo "=� Seeding MVP realms..."
-	@cd $(MVP_DIR) && npm run seed
-
-# MVP Start - Start all services in background
-mvp-start: env-setup install-mvp broker-db-up broker-db-setup install-console
+mvp: env-setup install-mvp broker-db-up broker-db-setup
 	@echo ""
-	@echo "< Starting MVP Demo Environment..."
+	@echo "<� Starting MVP Demo Environment..."
 	@echo "========================="
 	@echo ""
 	@echo "=� Step 1: Starting broker in background..."
-	@cd $(BROKER_DIR) && npm run dev > /tmp/broker.log 2>&1 &
+	@cd $(BROKER_DIR) && npm run dev &
 	@echo "� Waiting for broker to start..."
 	@sleep 8
 	@echo ""
-	@echo "=� Step 1.5: Seeding MVP realms..."
-	@$(MAKE) mvp-seed
-	@echo ""
 	@echo "=� Step 2: Starting pricing agent..."
-	@cd $(MVP_DIR)/agents/pricing-agent && npm start > /tmp/pricing-agent.log 2>&1 &
+	@cd $(MVP_DIR)/agents/pricing-agent && npm start &
 	@sleep 2
 	@echo ""
 	@echo "=� Step 3: Starting inventory agent..."
-	@cd $(MVP_DIR)/agents/inventory-agent && npm start > /tmp/inventory-agent.log 2>&1 &
-	@sleep 2
+	@cd $(MVP_DIR)/agents/inventory-agent && npm start &
+	@sleep 3
 	@echo ""
-	@echo "=� Step 4: Starting console UI..."
-	@cd $(CONSOLE_DIR) && npm run dev > /tmp/console.log 2>&1 &
-	@sleep 5
+	@echo "=� Step 4: Running price check scenario..."
 	@echo ""
-	@echo "< MVP Demo Environment is Running!"
-	@echo "======================================"
+	@cd $(MVP_DIR) && node scenarios/price-check-scenario.js
 	@echo ""
-	@echo "= Services:"
-	@echo "  = Broker:        ws://localhost:8080 (internal)"
-	@echo "  =�  Admin API:    http://localhost:3001"
-	@echo "  < Web Console:   http://localhost:3000"
-	@echo "  =� Database:     localhost:5433"
+	@echo "< MVP Demo Complete!"
 	@echo ""
-	@echo "= Agents Running:"
-	@echo "  = PricingAgent"
-	@echo "  = InventoryAgent"
-	@echo ""
-	@echo "= Next Steps:"
-	@echo "  1. Open your browser to http://localhost:3000"
-	@echo "  2. Use API key: $(ADMIN_API_KEY)"
-	@echo "  3. Try running: make mvp-price-check"
-	@echo ""
-	@echo "= Logs:"
-	@echo "  Broker:  tail -f /tmp/broker.log"
-	@echo "  Console: tail -f /tmp/console.log"
-	@echo "  Agents:  tail -f /tmp/*-agent.log"
-	@echo ""
-	@echo "= To stop everything: make mvp-stop"
-	@echo ""
-
-# MVP Stop - Stop all MVP services
-mvp-stop:
-	@echo "=� Stopping MVP Demo Environment..."
-	@$(MAKE) kill-all
-	@echo "=� Stopping database..."
-	@$(MAKE) broker-db-down
-	@echo ""
-	@echo " MVP Demo Environment stopped!"
-	@echo ""
-
-# Legacy mvp command (for backward compatibility)
-mvp: mvp-start
-	@echo ""
-	@echo "= Note: 'make mvp' now starts services in background"
-	@echo "  Use 'make mvp-stop' to stop all services"
+	@echo "To run again: make mvp-price-check"
+	@echo "To kill all: make kill-all"
 
 # ==============================================
 # Installation
@@ -363,32 +312,6 @@ clean-sdk:
 # ==============================================
 broker-db-up:
 	@echo "=� Starting broker database (PostgreSQL)..."
-	@echo "� Checking if ports 5433 and 5051 are available..."
-	@if lsof -i :5433 >/dev/null 2>&1; then \
-		echo ""; \
-		echo "= ERROR: Port 5433 is already in use!"; \
-		echo ""; \
-		echo "� What's using the port:"; \
-		lsof -i :5433 | head -5; \
-		echo ""; \
-		echo "= To fix this, you can:"; \
-		echo "   1. Stop the process: lsof -ti :5433 | xargs kill"; \
-		echo "   2. Or change DB_PORT in the Makefile (line 28) to a different port"; \
-		echo "   3. Then run: make broker-db-up"; \
-		echo ""; \
-		exit 1; \
-	fi
-	@if lsof -i :5051 >/dev/null 2>&1; then \
-		echo ""; \
-		echo "=  WARNING: Port 5051 (pgAdmin) is already in use!"; \
-		echo "� What's using the port:"; \
-		lsof -i :5051 | head -5; \
-		echo ""; \
-		echo "= pgAdmin won't start, but PostgreSQL will. To fix:"; \
-		echo "   1. Stop the process: lsof -ti :5051 | xargs kill"; \
-		echo "   2. Or edit broker/service/docker-compose.yml to use a different port"; \
-		echo ""; \
-	fi
 	@if docker ps -a | grep -q broker-postgres 2>/dev/null; then \
 		if docker ps | grep -q broker-postgres 2>/dev/null; then \
 			echo "= Database is already running!"; \
@@ -398,11 +321,19 @@ broker-db-up:
 			docker-compose -f $(BROKER_DIR)/docker-compose.yml up -d; \
 		fi; \
 	else \
-		docker-compose -f $(BROKER_DIR)/docker-compose.yml up -d; \
+		docker-compose -f $(BROKER_DIR)/docker-compose.yml up -d || { \
+			echo ""; \
+			echo "= ERROR: Failed to start database!"; \
+			echo "= Port 5433 or 5051 is likely already in use."; \
+			echo ""; \
+			echo "Try: make broker-db-down"; \
+			echo "Or: docker ps -a (to check for stopped containers)"; \
+			exit 1; \
+		}; \
 	fi
 	@echo "=� PostgreSQL is starting on port 5433"
 	@echo "=' pgAdmin is available at http://localhost:5051"
-	@echo "= Default credentials: admin@broker.local / admin"
+	@echo "= Default credentials: admin@broker.local / admin"
 	@echo "=� Database: broker_db, User: broker_user"
 
 broker-db-down:
